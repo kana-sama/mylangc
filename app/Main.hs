@@ -56,12 +56,10 @@ main = do
     help =
       unlines
         [ "Examples:",
-          "  mylangc asm SOURCE.mylang",
-          "    Generate GAS assembly file",
           "  mylangc build SOURCE.mylang",
-          "    Build executable",
           "  mylangc run SOURCE.mylang",
-          "    Evaluate compilled executable"
+          "  mylangc asm SOURCE.mylang",
+          "    Generate GAS assembly file"
         ]
 
 stripPostfix prefix str =
