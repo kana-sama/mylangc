@@ -1,0 +1,66 @@
+name: mylangc
+
+data-files:
+  - runtime/runtime.o
+
+default-extensions:
+  - BlockArguments
+  - DeriveAnyClass
+  - DeriveFunctor
+  - DeriveGeneric
+  - DerivingStrategies
+  - DerivingVia
+  - LambdaCase
+  - TypeSynonymInstances
+  - FlexibleInstances
+  - NamedFieldPuns
+  - OverloadedLabels
+
+ghc-options:
+  - -Wunused-packages
+  - -Wincomplete-patterns
+  - -Wmissing-deriving-strategies
+  - -Wmissing-fields
+  - -Wmissing-methods
+  - -Wunused-imports
+
+executables:
+  mylangc:
+    main: Main.hs
+    source-dirs: app
+    dependencies:
+      - base
+      - mylangc
+      - filepath
+      - temporary
+      - process
+
+library:
+  source-dirs: src
+  dependencies:
+    - base
+    - lens
+    - generic-lens
+    - mtl
+    - containers
+    - megaparsec
+    - parser-combinators
+
+tests:
+  mylangc-tests:
+    main: Main.hs
+    source-dirs: tests
+    dependencies:
+      - base
+      - mylangc
+      - tasty
+      - tasty-hunit
+      - tasty-fail-fast
+      - filepath
+      - filepattern
+      - process
+      - temporary
+    ghc-options:
+      - -threaded
+      - -rtsopts
+      - '"-with-rtsopts=-N -A128m -n4m"'

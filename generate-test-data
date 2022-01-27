@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+
+repo="git@github.com:ivan-magda/compiler-workout.git"
+branch="hw4"
+
+tmp=$(mktemp -d)
+
+repeat() {
+  for ((i=1;i<=$1;i++)); do
+	  # echo -n $2
+    printf '%s' $2
+  done
+}
+
+progress_width=60
+progress_prev=null
+progress() {
+  full=$(( $1 * $progress_width / $2 ))
+  empty=$(( $progress_width - $full ))
+
+  if [ "$progress_prev" != "$full" ]; then
+    progress_prev=$full
+
+    ceol=$(tput el)
+    echo -ne "\r${ceol}"
+
+    echo -n "["
+    repeat $full "#"
+    repeat $empty "_"
+    echo -n "]"
+  fi
+}
+
+generate() {
+  source=$1
+  prefix=$2
+  target=$3
+
+  rm -rf $target
+  mkdir $target
+  count=$( find $source -maxdepth 1 -name '*.expr' | wc -l  )
+  index=1
+  for fname in $source/$prefix*.expr; do
+    progress $index $count; index=$(( $index + 1 ))
+    [[ $fname =~ $source/$prefix(.*).expr ]]; id=${BASH_REMATCH[1]};
+    cp $source/$prefix${id}.expr $target/test${id}.mylang
+    cp $source/$prefix${id}.input $target/test${id}.mylang.input
+    cp $source/orig/$prefix${id}.log $target/test${id}.mylang.output
+  done
+
+  echo; echo
+}
+
+git clone --branch $branch $repo $tmp
+echo
+
+echo "Generating regressions tests"
+generate "$tmp/regression" "test" "tests-data/regression"
+
+echo "Generating expressions tests"
+generate "$tmp/regression/expressions" "generated" "tests-data/expressions"
+
+echo "Generating deep expressions tests"
+generate "$tmp/regression/deep-expressions" "generated" "tests-data/deep-expressions"
+
+echo "Removing repo"
+rm -rf $tmp
+echo
+
+echo Done.
