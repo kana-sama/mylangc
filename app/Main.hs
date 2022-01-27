@@ -1,14 +1,13 @@
-import Data.List (stripPrefix)
-import Language.MyLang.Parser
-import Language.MyLang.StackMachine
-import Language.MyLang.X86
+import Language.MyLang.Parser (parseFile)
+import Language.MyLang.StackMachine (compileStm)
+import Language.MyLang.X86 (compile)
 import Paths_mylangc (getDataFileName)
-import System.Environment
-import System.Exit
-import System.FilePath
-import System.IO
-import System.IO.Temp
-import System.Process
+import System.Environment (getArgs)
+import System.Exit (ExitCode (ExitSuccess), exitFailure)
+import System.FilePath (stripExtension, (<.>))
+import System.IO (hClose)
+import System.IO.Temp (withSystemTempFile)
+import System.Process (rawSystem)
 
 main = do
   getArgs >>= \case
@@ -31,7 +30,7 @@ main = do
         withSystemTempFile base \binPath binHandle -> do
           hClose binHandle
           build srcPath asmPath binPath
-          ExitSuccess <- system binPath
+          ExitSuccess <- rawSystem binPath []
           pure ()
     _ -> do
       putStrLn "Unknown arguments, try --help"
@@ -61,6 +60,3 @@ main = do
           "  mylangc asm SOURCE.mylang",
           "    Generate GAS assembly file"
         ]
-
-stripPostfix prefix str =
-  reverse <$> stripPrefix (reverse prefix) (reverse str)
