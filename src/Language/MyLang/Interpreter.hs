@@ -41,6 +41,14 @@ data BinOpResult v
   = BinOpDivideByZero
   | BinOpOk v
 
+toBool :: Value -> Bool
+toBool 0 = False
+toBool _ = True
+
+fromBool :: Bool -> Value
+fromBool False = 0
+fromBool True = 1
+
 denoteBinOp :: BinOp -> (Value -> Value -> BinOpResult Value)
 denoteBinOp = \case
   (:+) -> (+) --> BinOpOk
@@ -61,12 +69,6 @@ denoteBinOp = \case
 
     (==>) f binop = \a b -> binop (f a) (f b)
     (-->) binop f = \a b -> f (binop a b)
-
-    toBool 0 = False
-    toBool _ = True
-
-    fromBool False = 0
-    fromBool True = 1
 
     secondArgIsNotZero _ _ 0 = BinOpDivideByZero
     secondArgIsNotZero op v1 v2 = op v1 v2
@@ -100,6 +102,20 @@ evalStm = \case
   Write expr -> do
     val <- evalExpr expr
     #output <>= show val <> "\n"
+  Skip ->
+    pure ()
+  If cond then_ else_ -> do
+    cond' <- evalExpr cond
+    if toBool cond'
+      then evalStm then_
+      else evalStm else_
+  While cond body -> do
+    cond' <- evalExpr cond
+    if toBool cond'
+      then do
+        evalStm body
+        evalStm (While cond body)
+      else pure ()
   stm1 `Seq` stm2 -> do
     evalStm stm1
     evalStm stm2

@@ -76,6 +76,9 @@ stmP = foldr1 Seq <$> stm `sepBy1` symbol ";"
       choice
         [ Read <$> (symbol "read" *> parens identL),
           Write <$> (symbol "write" *> parens exprP),
+          Skip <$ symbol "skip",
+          do symbol "if"; cond <- exprP; symbol "then"; then_ <- stmP; symbol "else"; else_ <- stmP; symbol "fi"; pure (If cond then_ else_),
+          do symbol "while"; cond <- exprP; symbol "do"; body <- stmP; symbol "od"; pure (While cond body),
           do var <- identL; symbol ":="; expr <- exprP; pure (var := expr)
         ]
 

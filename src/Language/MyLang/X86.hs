@@ -42,7 +42,7 @@ isMemOp (Global _) = True
 isMemOp (S _) = True
 isMemOp _ = False
 
-data Cond = E | G | GE | L | LE | NE
+data Cond = E | G | GE | L | LE | NE | Z | NZ
   deriving stock (Show)
 
 data Instr
@@ -59,10 +59,13 @@ data Instr
   | IDIVQ Operand
   | PUSHQ Operand
   | POPQ Operand
+  | JMP Operand
+  | J Cond Operand
   | CALLQ Operand
   | SET Cond Operand
   | CQTO
   | RETQ
+  | Label String
 
 type Prog = [Instr]
 
@@ -101,10 +104,13 @@ instance Pretty Instr where
     IDIVQ o -> p "IDIVQ" [o]
     PUSHQ o -> p "PUSHQ" [o]
     POPQ o -> p "POPQ" [o]
+    JMP o -> p "JMP" [o]
+    J cond o -> p ("J" <> pretty cond) [o]
     CALLQ o -> p "CALLQ" [o]
     SET cond o -> p ("SET" <> pretty cond) [o]
     CQTO -> p "CQTO" []
     RETQ -> p "RETQ" []
+    Label lbl -> lbl <> ":"
     where
       p :: String -> [Operand] -> String
       p op ops = "\t" <> op <> " \t" <> intercalate ",\t" (map pretty ops)
@@ -125,6 +131,9 @@ data CodeGenError
   deriving anyclass (Exception)
 
 type M = ExceptT CodeGenError (StateT Config (Writer Prog))
+
+_label :: SM.Label -> Operand
+_label (SM.Label l) = M ("_label_" <> show l)
 
 _global :: Ident -> M Operand
 _global var = do
@@ -177,18 +186,24 @@ movq a b
       movq' rax b
   | otherwise = movq' a b
 
-idivq, pushq, popq, callq :: Operand -> M ()
+idivq, pushq, popq, jmp, callq :: Operand -> M ()
 idivq a = instr (IDIVQ a)
 pushq a = instr (PUSHQ a)
 popq a = instr (POPQ a)
+jmp a = instr (JMP a)
 callq a = instr (CALLQ a)
 
-set :: Cond -> Operand -> M ()
+set, j :: Cond -> Operand -> M ()
 set cond o = instr (SET cond o)
+j cond o = instr (J cond o)
 
 cqto, retq :: M ()
 cqto = instr CQTO
 retq = instr RETQ
+
+label :: Operand -> M ()
+label (M lbl) = instr (Label lbl)
+label _ = error "invalid label value"
 
 compileSMToX86 :: SM.Prog -> M ()
 compileSMToX86 = traverse_ \case
@@ -226,6 +241,14 @@ compileSMToX86 = traverse_ \case
   SM.WRITE -> do val <- _pop; movq val rdi; callq (M "_Lwrite")
   SM.LOAD var -> do var <- _global var; tgt <- _allocate; movq var rax; movq rax tgt
   SM.SAVE var -> do var <- _global var; val <- _pop; movq val rax; movq rax var
+  SM.JMP lbl -> jmp (_label lbl)
+  SM.JMPZ lbl -> do
+    x <- _pop
+    movq x rax
+    testq rax rax
+    j Z (_label lbl)
+  SM.LABEL lbl -> do
+    label (_label lbl)
   where
     comparison cond = do (y, x) <- _pop2; xorq rax rax; movq y rdx; cmpq rdx x; set cond al; movq rax =<< _allocate
 

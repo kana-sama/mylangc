@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 repo="git@github.com:ivan-magda/compiler-workout.git"
-branch="hw4"
+branch="hw5"
 
 tmp=$(mktemp -d)
 
@@ -57,11 +57,11 @@ echo
 echo "Generating regressions tests"
 generate "$tmp/regression" "test" "tests-data/regression"
 
-echo "Generating expressions tests"
-generate "$tmp/regression/expressions" "generated" "tests-data/expressions"
+# echo "Generating expressions tests"
+# generate "$tmp/regression/expressions" "generated" "tests-data/expressions"
 
-echo "Generating deep expressions tests"
-generate "$tmp/regression/deep-expressions" "generated" "tests-data/deep-expressions"
+# echo "Generating deep expressions tests"
+# generate "$tmp/regression/deep-expressions" "generated" "tests-data/deep-expressions"
 
 echo "Removing repo"
 rm -rf $tmp

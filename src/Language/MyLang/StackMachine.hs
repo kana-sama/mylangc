@@ -1,6 +1,10 @@
+{-# LANGUAGE ImportQualifiedPost #-}
+{-# LANGUAGE RecursiveDo #-}
+
 module Language.MyLang.StackMachine
   ( Prog,
     Instr (..),
+    Label (..),
     compileStm,
     compute,
   )
@@ -10,9 +14,11 @@ import Control.Exception (Exception, throwIO)
 import Control.Lens hiding ((:<), (:>))
 import Control.Monad.Except
 import Control.Monad.State
-import Data.Foldable (traverse_)
+import Control.Monad.Writer
 import Data.Generics.Labels ()
-import Data.Map (Map)
+import Data.Map.Strict (Map)
+import Data.Map.Strict qualified as Map
+import Data.Vector qualified as Vector
 import GHC.Generics (Generic)
 import Language.MyLang.Interpreter (BinOpResult (..), denoteBinOp)
 import Language.MyLang.Syntax
@@ -26,6 +32,10 @@ type Output = String
 type Memory = Map Ident Value
 
 type Stack = [Value]
+
+newtype Label = Label Int
+  deriving stock (Show)
+  deriving newtype (Eq, Ord)
 
 data Config = Config {stack :: Stack, memory :: Memory, input :: Input, output :: Output}
   deriving stock (Generic)
@@ -47,6 +57,9 @@ data Instr
   | WRITE
   | LOAD Ident
   | SAVE Ident
+  | JMP Label
+  | JMPZ Label
+  | LABEL Label
   deriving stock (Show)
 
 type Prog = [Instr]
@@ -63,11 +76,38 @@ compileExpr = \case
       ]
 
 compileStm :: Stm -> Prog
-compileStm = \case
-  var := expr -> compileExpr expr ++ [SAVE var]
-  Read var -> [READ, SAVE var]
-  Write expr -> compileExpr expr ++ [WRITE]
-  stm1 `Seq` stm2 -> compileStm stm1 ++ compileStm stm2
+compileStm stm = execWriter (execStateT (go stm) (Label 0))
+  where
+    label :: StateT Label (Writer Prog) Label
+    label = do
+      l <- state \(Label l) -> (Label l, Label (l + 1))
+      tell [LABEL l]
+      pure l
+
+    go :: Stm -> StateT Label (Writer Prog) ()
+    go = \case
+      var := expr -> do tell (compileExpr expr); tell [SAVE var]
+      Read var -> tell [READ, SAVE var]
+      Write expr -> do tell (compileExpr expr); tell [WRITE]
+      Skip -> pure ()
+      If cond th el -> mdo
+        tell (compileExpr cond)
+        tell [JMPZ label_else]
+        go th
+        tell [JMP label_fi]
+        label_else <- label
+        go el
+        label_fi <- label
+        pure ()
+      While cond body -> mdo
+        label_loop <- label
+        tell (compileExpr cond)
+        tell [JMPZ label_od]
+        go body
+        tell [JMP label_loop]
+        label_od <- label
+        pure ()
+      stm1 `Seq` stm2 -> do go stm1; go stm2
 
 push :: Value -> M ()
 push val = #stack %= (val :)
@@ -80,35 +120,56 @@ pop =
       #stack .= stack
       pure val
 
-evalInstr :: Instr -> M ()
-evalInstr = \case
-  PUSH val -> push val
-  BINOP op -> do
-    val2 <- pop
-    val1 <- pop
-    case denoteBinOp op val1 val2 of
-      BinOpDivideByZero -> throwError DivideByZero
-      BinOpOk val -> push val
-  READ -> do
-    #output <>= "> "
-    use #input >>= \case
-      [] -> throwError NotEnoughInput
-      val : input -> do
-        #input .= input
-        push val
-  WRITE -> do
-    val <- pop
-    #output <>= show val <> "\n"
-  LOAD var -> do
-    use (#memory . at var) >>= \case
-      Nothing -> throwError (UnknownVariable var)
-      Just val -> push val
-  SAVE var -> do
-    val <- pop
-    #memory . at var ?= val
-
 evalProg :: Prog -> M ()
-evalProg = traverse_ evalInstr
+evalProg prog = do
+  let labelTable :: Map Label Int
+      labelTable = Map.fromList [(l, i) | (LABEL l, i) <- zip prog [0 ..]]
+  let progV = Vector.fromList prog
+  let loop pos = do
+        case progV Vector.!? pos of
+          Nothing -> pure ()
+          Just instr -> case instr of
+            PUSH val -> do
+              push val
+              loop (pos + 1)
+            BINOP op -> do
+              val2 <- pop
+              val1 <- pop
+              case denoteBinOp op val1 val2 of
+                BinOpDivideByZero -> throwError DivideByZero
+                BinOpOk val -> push val
+              loop (pos + 1)
+            READ -> do
+              #output <>= "> "
+              use #input >>= \case
+                [] -> throwError NotEnoughInput
+                val : input -> do
+                  #input .= input
+                  push val
+              loop (pos + 1)
+            WRITE -> do
+              val <- pop
+              #output <>= show val <> "\n"
+              loop (pos + 1)
+            LOAD var -> do
+              use (#memory . at var) >>= \case
+                Nothing -> throwError (UnknownVariable var)
+                Just val -> push val
+              loop (pos + 1)
+            SAVE var -> do
+              val <- pop
+              #memory . at var ?= val
+              loop (pos + 1)
+            JMP label -> do
+              loop (labelTable Map.! label)
+            JMPZ label -> do
+              val <- pop
+              if val == 0
+                then loop (labelTable Map.! label)
+                else loop (pos + 1)
+            LABEL label -> do
+              loop (pos + 1)
+  loop 0
 
 compute :: Stm -> Input -> IO Output
 compute stm input = do

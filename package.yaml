@@ -5,6 +5,7 @@ data-files:
 
 default-extensions:
   - BlockArguments
+  - GeneralizedNewtypeDeriving
   - DeriveAnyClass
   - DeriveFunctor
   - DeriveGeneric
@@ -13,8 +14,10 @@ default-extensions:
   - LambdaCase
   - TypeSynonymInstances
   - FlexibleInstances
+  - FlexibleContexts
   - NamedFieldPuns
   - OverloadedLabels
+  - NoFieldSelectors
 
 ghc-options:
   - -Wunused-packages
@@ -43,6 +46,7 @@ library:
     - generic-lens
     - mtl
     - containers
+    - vector
     - megaparsec
     - parser-combinators
 

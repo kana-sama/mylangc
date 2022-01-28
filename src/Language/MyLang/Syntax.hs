@@ -28,5 +28,8 @@ data Stm
   = Ident := Expr
   | Read Ident
   | Write Expr
+  | Skip
+  | If Expr Stm Stm
+  | While Expr Stm
   | Stm `Seq` Stm
   deriving stock (Show, Eq)
