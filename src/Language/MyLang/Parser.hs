@@ -78,21 +78,33 @@ stmP = foldr1 Seq <$> stm `sepBy1` symbol ";"
           Write <$> (symbol "write" *> parens exprP),
           Skip <$ symbol "skip",
           if_,
+          for_,
           do symbol "while"; cond <- exprP; symbol "do"; body <- stmP; symbol "od"; pure (While cond body),
           do symbol "repeat"; body <- stmP; symbol "until"; cond <- exprP; pure (Repeat body cond),
           do var <- identL; symbol ":="; expr <- exprP; pure (var := expr)
         ]
 
-    if_ =
-      do
-        symbol "if"
-        cond <- exprP
-        symbol "then"
-        then_ <- stmP
-        elifs <- many do symbol "elif"; cond <- exprP; symbol "then"; body <- stmP; pure (cond, body)
-        else_ <- optional (symbol "else" *> stmP)
-        symbol "fi"
-        pure (If cond then_ elifs else_)
+    if_ = do
+      symbol "if"
+      cond <- exprP
+      symbol "then"
+      then_ <- stmP
+      elifs <- many do symbol "elif"; cond <- exprP; symbol "then"; body <- stmP; pure (cond, body)
+      else_ <- optional (symbol "else" *> stmP)
+      symbol "fi"
+      pure (If cond then_ elifs else_)
+
+    for_ = do
+      symbol "for"
+      init <- stmP
+      symbol ","
+      cond <- exprP
+      symbol ","
+      step <- stmP
+      symbol "do"
+      body <- stmP
+      symbol "od"
+      pure (For init cond step body)
 
 data ParserError = ParserError String
   deriving stock (Show)

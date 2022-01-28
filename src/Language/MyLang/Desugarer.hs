@@ -11,29 +11,13 @@ class Convert a b | a -> b, b -> a where
   convert :: a -> b
 
 instance Convert C.Ident A.Ident where
-  convert name = name
+  convert = id
 
 instance Convert C.BinOp A.BinOp where
-  convert = \case
-    (C.:+) -> (A.:+)
-    (C.:-) -> (A.:-)
-    (C.:*) -> (A.:*)
-    (C.:/) -> (A.:/)
-    (C.:%) -> (A.:%)
-    (C.:==) -> (A.:==)
-    (C.:!=) -> (A.:!=)
-    (C.:<=) -> (A.:<=)
-    (C.:<) -> (A.:<)
-    (C.:>=) -> (A.:>=)
-    (C.:>) -> (A.:>)
-    (C.:&&) -> (A.:&&)
-    (C.:!!) -> (A.:!!)
+  convert = id
 
 instance Convert C.Expr A.Expr where
-  convert = \case
-    C.Lit n -> A.Lit n
-    C.Var var -> A.Var (convert var)
-    C.BinOp op expr1 expr2 -> A.BinOp (convert op) (convert expr1) (convert expr2)
+  convert = id
 
 instance Convert C.Stm A.Stm where
   convert = \case
@@ -55,6 +39,8 @@ instance Convert C.Stm A.Stm where
         (convert (C.If expr2 stm2 elifs else_))
     C.While expr stm -> A.While (convert expr) (convert stm)
     C.Repeat stm expr -> A.Repeat (convert stm) (convert expr)
+    C.For init cond step body ->
+      convert init `A.Seq` convert (C.While cond (body `C.Seq` step))
     stm1 `C.Seq` stm2 -> convert stm1 `A.Seq` convert stm2
 
 desugar :: C.Stm -> A.Stm

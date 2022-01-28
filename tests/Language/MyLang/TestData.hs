@@ -37,4 +37,4 @@ dirTests dir name run = do
 getTests :: FilePath -> IO [(FilePath, FilePath, FilePath)]
 getTests dir = do
   sources <- getDirectoryFiles dir ["*.mylang"]
-  pure . take 18 $ [(dir </> s, dir </> s <.> "input", dir </> s <.> "output") | s <- sources]
+  pure [(dir </> s, dir </> s <.> "input", dir </> s <.> "output") | s <- sources]
