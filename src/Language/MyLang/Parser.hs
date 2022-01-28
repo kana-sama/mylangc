@@ -9,7 +9,7 @@ where
 import Control.Exception (Exception (..), throwIO)
 import Control.Monad.Combinators.Expr
 import Data.Void (Void)
-import Language.MyLang.Syntax
+import Language.MyLang.CST
 import Text.Megaparsec hiding (State, match, try)
 import Text.Megaparsec.Char
 import Text.Megaparsec.Char.Lexer qualified as L
@@ -79,6 +79,7 @@ stmP = foldr1 Seq <$> stm `sepBy1` symbol ";"
           Skip <$ symbol "skip",
           do symbol "if"; cond <- exprP; symbol "then"; then_ <- stmP; symbol "else"; else_ <- stmP; symbol "fi"; pure (If cond then_ else_),
           do symbol "while"; cond <- exprP; symbol "do"; body <- stmP; symbol "od"; pure (While cond body),
+          do symbol "repeat"; body <- stmP; symbol "until"; cond <- exprP; pure (Repeat body cond),
           do var <- identL; symbol ":="; expr <- exprP; pure (var := expr)
         ]
 

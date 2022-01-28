@@ -20,8 +20,8 @@ import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Vector qualified as Vector
 import GHC.Generics (Generic)
+import Language.MyLang.AST
 import Language.MyLang.Interpreter (BinOpResult (..), denoteBinOp)
-import Language.MyLang.Syntax
 
 type Value = Int
 
@@ -107,6 +107,11 @@ compileStm stm = execWriter (execStateT (go stm) (Label 0))
         tell [JMP label_loop]
         label_od <- label
         pure ()
+      Repeat body cond -> mdo
+        label_loop <- label
+        go body
+        tell (compileExpr cond)
+        tell [JMPZ label_loop]
       stm1 `Seq` stm2 -> do go stm1; go stm2
 
 push :: Value -> M ()

@@ -18,6 +18,8 @@ default-extensions:
   - NamedFieldPuns
   - OverloadedLabels
   - NoFieldSelectors
+  - FunctionalDependencies
+  - MultiParamTypeClasses
 
 ghc-options:
   - -Wunused-packages

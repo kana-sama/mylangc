@@ -15,7 +15,7 @@ import Control.Monad.State
 import Data.Generics.Labels ()
 import Data.Map (Map)
 import GHC.Generics (Generic)
-import Language.MyLang.Syntax
+import Language.MyLang.AST
 
 type Value = Int
 
@@ -116,6 +116,12 @@ evalStm = \case
         evalStm body
         evalStm (While cond body)
       else pure ()
+  Repeat body cond -> do
+    evalStm body
+    cond' <- evalExpr cond
+    if toBool cond'
+      then pure ()
+      else evalStm (Repeat body cond)
   stm1 `Seq` stm2 -> do
     evalStm stm1
     evalStm stm2

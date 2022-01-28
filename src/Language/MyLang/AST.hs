@@ -1,4 +1,4 @@
-module Language.MyLang.Syntax where
+module Language.MyLang.AST where
 
 type Ident = String
 
@@ -31,5 +31,6 @@ data Stm
   | Skip
   | If Expr Stm Stm
   | While Expr Stm
+  | Repeat Stm Expr
   | Stm `Seq` Stm
   deriving stock (Show, Eq)

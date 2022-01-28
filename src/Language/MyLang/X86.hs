@@ -14,8 +14,8 @@ import Data.List (intercalate)
 import Data.Set (Set)
 import Data.Set qualified as Set
 import GHC.Generics (Generic)
+import Language.MyLang.AST
 import Language.MyLang.StackMachine qualified as SM
-import Language.MyLang.Syntax
 import Prelude hiding (Ordering (..))
 
 data Reg = RBX | RCX | RSI | RDI | RAX | RDX | RBP | RSP | RIP | AL | AH
