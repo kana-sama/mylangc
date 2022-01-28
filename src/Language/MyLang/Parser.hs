@@ -29,7 +29,7 @@ integerL :: Parser Int
 integerL = lexeme L.decimal
 
 identL :: Parser Ident
-identL = lexeme ((:) <$> letterChar <*> many alphaNumChar <?> "ident")
+identL = lexeme ((:) <$> letterChar <*> many (alphaNumChar <|> oneOf "_") <?> "ident")
 
 parens :: Parser a -> Parser a
 parens = between (symbol "(") (symbol ")")
