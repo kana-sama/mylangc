@@ -29,7 +29,12 @@ data Stm
   | Read Ident
   | Write Expr
   | Skip
-  | If Expr Stm Stm
+  | -- If e1 s1 [(e2, s2)] (Just s3) ->
+    -- if e1 then s1 elif e2 then s2 else s3
+    --
+    -- If e1 s1 [(e2, s2)] Nothing   ->
+    -- if e1 then s1 elif e2 then s2
+    If Expr Stm [(Expr, Stm)] (Maybe Stm)
   | While Expr Stm
   | Repeat Stm Expr
   | Stm `Seq` Stm

@@ -41,7 +41,18 @@ instance Convert C.Stm A.Stm where
     C.Read var -> A.Read (convert var)
     C.Write expr -> A.Write (convert expr)
     C.Skip -> A.Skip
-    C.If expr stm1 stm2 -> A.If (convert expr) (convert stm1) (convert stm2)
+    C.If expr1 stm1 [] Nothing ->
+      (A.If (convert expr1))
+        (convert stm1)
+        A.Skip
+    C.If expr1 stm1 [] (Just stm2) ->
+      (A.If (convert expr1))
+        (convert stm1)
+        (convert stm2)
+    C.If expr1 stm1 ((expr2, stm2) : elifs) else_ ->
+      (A.If (convert expr1))
+        (convert stm1)
+        (convert (C.If expr2 stm2 elifs else_))
     C.While expr stm -> A.While (convert expr) (convert stm)
     C.Repeat stm expr -> A.Repeat (convert stm) (convert expr)
     stm1 `C.Seq` stm2 -> convert stm1 `A.Seq` convert stm2
