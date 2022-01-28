@@ -222,10 +222,10 @@ compileSMToX86 = traverse_ \case
     set NE al
     movzx al rax
     movq rax =<< _allocate
-  SM.READ -> do tgt <- _allocate; xorq rax rax; callq (M "_Lread"); movq rax tgt
+  SM.READ -> do tgt <- _allocate; callq (M "_Lread"); movq rax tgt
   SM.WRITE -> do val <- _pop; movq val rdi; callq (M "_Lwrite")
-  SM.LOAD var -> do var <- _global var; tgt <- _allocate; movq var tgt
-  SM.SAVE var -> do var <- _global var; val <- _pop; movq val var
+  SM.LOAD var -> do var <- _global var; tgt <- _allocate; movq var rax; movq rax tgt
+  SM.SAVE var -> do var <- _global var; val <- _pop; movq val rax; movq rax var
   where
     comparison cond = do (y, x) <- _pop2; xorq rax rax; movq y rdx; cmpq rdx x; set cond al; movq rax =<< _allocate
 
