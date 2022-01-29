@@ -42,7 +42,7 @@ instance Convert C.Stm A.Stm where
     C.Repeat stm expr -> A.Repeat (convert stm) (convert expr)
     C.For init cond step body ->
       convert init `A.Seq` convert (C.While cond (body `C.Seq` step))
-    C.Return -> A.Return
+    C.Return mexpr -> A.Return (convert <$> mexpr)
     stm1 `C.Seq` stm2 -> convert stm1 `A.Seq` convert stm2
 
 instance Convert C.Definition A.Definition where

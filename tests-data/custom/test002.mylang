@@ -1,0 +1,10 @@
+fun trace_id(a) {
+  write(a);
+  return a
+}
+
+fun plus(a, b) {
+  return a + b
+}
+
+write(plus(trace_id(1), trace_id(2)))

@@ -12,6 +12,7 @@ data Expr
   = Lit Int
   | Var Ident
   | BinOp BinOp Expr Expr
+  | Apply Ident [Expr]
   deriving stock (Show, Eq)
 
 data Stm
@@ -23,7 +24,7 @@ data Stm
   | If Expr Stm Stm
   | While Expr Stm
   | Repeat Stm Expr
-  | Return
+  | Return (Maybe Expr)
   | Stm `Seq` Stm
   deriving stock (Show, Eq)
 

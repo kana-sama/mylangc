@@ -38,6 +38,7 @@ termP :: Parser Expr
 termP =
   choice
     [ parens exprP,
+      try do name <- ident; args <- parens (exprP `sepBy` symbol ","); pure (Apply name args),
       Var <$> ident,
       Lit <$> integerL
     ]
@@ -81,7 +82,7 @@ stmP = foldr1 Seq <$> stm `sepBy1` symbol ";"
           for_,
           do symbol "while"; cond <- exprP; symbol "do"; body <- stmP; symbol "od"; pure (While cond body),
           do symbol "repeat"; body <- stmP; symbol "until"; cond <- exprP; pure (Repeat body cond),
-          do symbol "return"; pure Return,
+          do symbol "return"; mexpr <- optional exprP; pure (Return mexpr),
           try do f <- ident; args <- parens (exprP `sepBy` symbol ","); pure (Call f args),
           do var <- ident; symbol ":="; expr <- exprP; pure (var := expr)
         ]

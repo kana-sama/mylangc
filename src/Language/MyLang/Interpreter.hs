@@ -64,6 +64,18 @@ input =
       #input .= input
       pure val
 
+call :: Ident -> [Expr] -> M Value
+call name args = do
+  def <- lookupDef name
+  vals <- traverse evalExpr args
+  currentMem <- use #memory
+  #memory %= Memory.enterWith (def.args ++ def.locals)
+  for_ (zip def.args vals) \(var, val) -> do
+    #memory %= Memory.insert var val
+  result <- evalStm Skip def.body
+  #memory %= Memory.leaveTo currentMem
+  pure result
+
 evalExpr :: Expr -> M Value
 evalExpr = \case
   Lit val -> pure val
@@ -72,11 +84,12 @@ evalExpr = \case
     val1 <- evalExpr expr1
     val2 <- evalExpr expr2
     denoteBinOpM BinOpError op val1 val2
+  Apply name args -> call name args
 
-evalStm :: Stm -> Stm -> M ()
+evalStm :: Stm -> Stm -> M Int
 evalStm k = \case
   Skip
-    | k == Skip -> pure ()
+    | k == Skip -> pure 0
     | otherwise -> evalStm Skip k
   var := expr -> do
     val <- evalExpr expr
@@ -92,14 +105,7 @@ evalStm k = \case
     #output <>= show val ++ "\n"
     evalStm Skip k
   Call name args -> do
-    def <- lookupDef name
-    vals <- traverse evalExpr args
-    currentMem <- use #memory
-    #memory %= Memory.enterWith (def.args ++ def.locals)
-    for_ (zip def.args vals) \(var, val) -> do
-      #memory %= Memory.insert var val
-    evalStm Skip def.body
-    #memory %= Memory.leaveTo currentMem
+    call name args
     evalStm Skip k
   If cond then_ else_ -> do
     cond' <- evalExpr cond
@@ -117,7 +123,8 @@ evalStm k = \case
     if cond' == 0
       then evalStm k (Repeat body cond)
       else evalStm Skip k
-  Return -> pure ()
+  Return Nothing -> pure 0
+  Return (Just e) -> evalExpr e
   stm1 `Seq` stm2 -> do
     evalStm (stm2 <> k) stm1
   where
@@ -128,6 +135,7 @@ evalUnit :: Unit -> M ()
 evalUnit Unit {body, defs} =
   local (Map.fromList [(d.name, d) | d <- defs] <>) do
     evalStm Skip body
+    pure ()
 
 interpret :: Unit -> [Int] -> IO String
 interpret unit input =
