@@ -35,6 +35,7 @@ data InterpreterError
   = UnknownVariable Ident
   | UnknownFunction Ident
   | BinOpError BinOpError
+  | NoResultFromFunction Ident
   | NotEnoughInput
   deriving stock (Show)
   deriving anyclass (Exception)
@@ -45,26 +46,29 @@ runM :: M a -> Map Ident Definition -> Config -> Either InterpreterError (a, Con
 runM m defs config = runReader (runExceptT (runStateT m config)) defs
 
 lookupVar :: Ident -> M Value
-lookupVar var =
-  use (#memory . to (Memory.lookup var)) >>= \case
+lookupVar var = do
+  mval <- use (#memory . to (Memory.lookup var))
+  case mval of
     Nothing -> throwError (UnknownVariable var)
     Just val -> pure val
 
 lookupDef :: Ident -> M Definition
-lookupDef name =
-  asks (Map.lookup name) >>= \case
+lookupDef name = do
+  mdef <- asks (Map.lookup name)
+  case mdef of
     Nothing -> throwError (UnknownFunction name)
     Just def -> pure def
 
 input :: M Value
-input =
-  use #input >>= \case
+input = do
+  input <- use #input
+  case input of
     [] -> throwError NotEnoughInput
     val : input -> do
       #input .= input
       pure val
 
-call :: Ident -> [Expr] -> M Value
+call :: Ident -> [Expr] -> M (Maybe Value)
 call name args = do
   def <- lookupDef name
   vals <- traverse evalExpr args
@@ -84,12 +88,16 @@ evalExpr = \case
     val1 <- evalExpr expr1
     val2 <- evalExpr expr2
     denoteBinOpM BinOpError op val1 val2
-  Apply name args -> call name args
+  Apply name args -> do
+    mval <- call name args
+    case mval of
+      Nothing -> throwError (NoResultFromFunction name)
+      Just val -> pure val
 
-evalStm :: Stm -> Stm -> M Int
+evalStm :: Stm -> Stm -> M (Maybe Int)
 evalStm k = \case
   Skip
-    | k == Skip -> pure 0
+    | k == Skip -> pure Nothing
     | otherwise -> evalStm Skip k
   var := expr -> do
     val <- evalExpr expr
@@ -123,8 +131,11 @@ evalStm k = \case
     if cond' == 0
       then evalStm k (Repeat body cond)
       else evalStm Skip k
-  Return Nothing -> pure 0
-  Return (Just e) -> evalExpr e
+  Return Nothing -> do
+    pure Nothing
+  Return (Just expr) -> do
+    val <- evalExpr expr
+    pure (Just val)
   stm1 `Seq` stm2 -> do
     evalStm (stm2 <> k) stm1
   where
