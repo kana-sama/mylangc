@@ -8,11 +8,11 @@ import Test.Tasty
 main :: IO ()
 main = do
   interpreter <- Interpreter.spec
-  -- stackMachine <- StackMachine.spec
+  stackMachine <- StackMachine.spec
   -- x86 <- X86.spec
   defaultMain do
     (testGroup "generated tests")
-      [ interpreter
-      -- ,  stackMachine
-      -- , x86
+      [ interpreter,
+        stackMachine
+        -- , x86
       ]

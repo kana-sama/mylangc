@@ -96,6 +96,9 @@ exprToProg = \case
         exprToProg expr2,
         [BINOP op]
       ]
+  Apply f args ->
+    concatMap exprToProg args
+      ++ [CALL f]
 
 type GenM = StateT Int (Writer Prog)
 
@@ -113,7 +116,7 @@ stmToProg = \case
     tell (exprToProg expr)
     tell [WRITE]
   Call f args -> do
-    for_ (reverse args) \arg -> do
+    for_ args \arg -> do
       tell (exprToProg arg)
     tell [CALL f]
   Skip -> pure ()
@@ -139,6 +142,10 @@ stmToProg = \case
     stmToProg body
     tell (exprToProg cond)
     tell [JMPZ label_loop]
+  Return mexpr -> do
+    for_ mexpr \expr -> do
+      tell (exprToProg expr)
+    tell [END]
   stm1 `Seq` stm2 -> do
     stmToProg stm1
     stmToProg stm2
@@ -226,7 +233,7 @@ step labelTable prog = do
         #cursor .= labelTable Map.! label
       BEGIN args locals -> do
         #memory %= Memory.enterWith (args ++ locals)
-        for_ args \var -> do
+        for_ (reverse args) \var -> do
           val <- pop
           #memory %= Memory.insert var val
         for_ locals \var -> do
