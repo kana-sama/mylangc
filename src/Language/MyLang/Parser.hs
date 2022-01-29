@@ -81,6 +81,7 @@ stmP = foldr1 Seq <$> stm `sepBy1` symbol ";"
           for_,
           do symbol "while"; cond <- exprP; symbol "do"; body <- stmP; symbol "od"; pure (While cond body),
           do symbol "repeat"; body <- stmP; symbol "until"; cond <- exprP; pure (Repeat body cond),
+          do symbol "return"; pure Return,
           try do f <- ident; args <- parens (exprP `sepBy` symbol ","); pure (Call f args),
           do var <- ident; symbol ":="; expr <- exprP; pure (var := expr)
         ]

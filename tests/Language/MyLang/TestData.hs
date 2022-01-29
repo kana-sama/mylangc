@@ -17,10 +17,11 @@ type Runner = (Unit -> Input -> IO Output)
 
 mkSpec :: String -> Runner -> IO TestTree
 mkSpec name run = do
+  custom <- dirTests "custom" name run
   regression <- dirTests "regression" name run
   -- expressions <- dirTests "expressions" name run
   -- deep_expressions <- dirTests "deep-expressions" name run
-  pure (testGroup ("[" <> name <> "] tests-data/regression") [regression])
+  pure (testGroup ("[" <> name <> "] tests-data") [custom, regression])
 
 dirTests :: FilePath -> String -> Runner -> IO TestTree
 dirTests dir name run = do

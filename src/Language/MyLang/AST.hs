@@ -23,6 +23,7 @@ data Stm
   | If Expr Stm Stm
   | While Expr Stm
   | Repeat Stm Expr
+  | Return
   | Stm `Seq` Stm
   deriving stock (Show, Eq)
 

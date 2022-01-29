@@ -24,7 +24,7 @@ instance Convert C.Stm A.Stm where
     var C.:= expr -> convert var A.:= convert expr
     C.Read var -> A.Read (convert var)
     C.Write expr -> A.Write (convert expr)
-    C.Call name args -> A.Call (convert name) [convert a | a <- args]
+    C.Call name args -> A.Call (convert name) (convert <$> args)
     C.Skip -> A.Skip
     C.If expr1 stm1 [] Nothing ->
       (A.If (convert expr1))
@@ -42,6 +42,7 @@ instance Convert C.Stm A.Stm where
     C.Repeat stm expr -> A.Repeat (convert stm) (convert expr)
     C.For init cond step body ->
       convert init `A.Seq` convert (C.While cond (body `C.Seq` step))
+    C.Return -> A.Return
     stm1 `C.Seq` stm2 -> convert stm1 `A.Seq` convert stm2
 
 instance Convert C.Definition A.Definition where

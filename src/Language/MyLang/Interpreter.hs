@@ -117,6 +117,7 @@ evalStm k = \case
     if cond' == 0
       then evalStm k (Repeat body cond)
       else evalStm Skip k
+  Return -> pure ()
   stm1 `Seq` stm2 -> do
     evalStm (stm2 <> k) stm1
   where

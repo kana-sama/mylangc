@@ -21,6 +21,7 @@ data Stm
   | While Expr Stm
   | Repeat Stm Expr
   | For Stm Expr Stm Stm
+  | Return
   | Stm `Seq` Stm
   deriving stock (Show, Eq)
 

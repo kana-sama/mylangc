@@ -1,0 +1,19 @@
+fun f1() {
+  return;
+  write(1);
+  write(2)
+}
+
+fun f2() {
+  write(3);
+  return;
+  write(4)
+}
+
+fun f3() {
+  write(5);
+  write(6);
+  return
+}
+
+f1(); f2(); f3()
