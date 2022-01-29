@@ -6,10 +6,9 @@ module Language.MyLang.Parser
   )
 where
 
-import Control.Exception (Exception (..), throwIO)
 import Control.Monad.Combinators.Expr
-import Data.Void (Void)
 import Language.MyLang.CST
+import Language.MyLang.Prelude
 import Text.Megaparsec hiding (State, match)
 import Text.Megaparsec.Char
 import Text.Megaparsec.Char.Lexer qualified as L

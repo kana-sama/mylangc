@@ -7,20 +7,12 @@ module Language.MyLang.Interpreter
   )
 where
 
-import Control.Exception (Exception, throwIO)
-import Control.Lens hiding ((:<), (:>))
-import Control.Monad.Except
-import Control.Monad.Reader
-import Control.Monad.State
-import Data.Foldable (for_)
-import Data.Generics.Labels ()
-import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
-import GHC.Generics (Generic)
 import Language.MyLang.AST
 import Language.MyLang.BinOp (BinOpError, denoteBinOpM)
 import Language.MyLang.Memory (Memory)
 import Language.MyLang.Memory qualified as Memory
+import Language.MyLang.Prelude
 
 type Value = Int
 
@@ -47,7 +39,7 @@ runM m defs config = runReader (runExceptT (runStateT m config)) defs
 
 lookupVar :: Ident -> M Value
 lookupVar var = do
-  mval <- use (#memory . to (Memory.lookup var))
+  mval <- uses #memory (Memory.lookup var)
   case mval of
     Nothing -> throwError (UnknownVariable var)
     Just val -> pure val

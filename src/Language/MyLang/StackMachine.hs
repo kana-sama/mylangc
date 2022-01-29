@@ -12,22 +12,13 @@ module Language.MyLang.StackMachine
   )
 where
 
-import Control.Exception (Exception, throwIO)
-import Control.Lens hiding ((:<), (:>))
-import Control.Monad.Except
-import Control.Monad.State
-import Control.Monad.Writer
-import Data.Foldable (for_)
-import Data.Generics.Labels ()
-import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
-import Data.Vector (Vector)
 import Data.Vector qualified as Vector
-import GHC.Generics (Generic)
 import Language.MyLang.AST
 import Language.MyLang.BinOp (BinOpError, denoteBinOpM)
 import Language.MyLang.Memory (Memory)
 import Language.MyLang.Memory qualified as Memory
+import Language.MyLang.Prelude
 
 type Value = Int
 
@@ -212,7 +203,8 @@ step labelTable prog = do
         #output <>= show val <> "\n"
         #cursor += 1
       LOAD var -> do
-        use (#memory . to (Memory.lookup var)) >>= \case
+        mval <- uses #memory (Memory.lookup var)
+        case mval of
           Nothing -> throwError (UnknownVariable var)
           Just val -> push val
         #cursor += 1

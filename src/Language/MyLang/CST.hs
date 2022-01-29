@@ -12,16 +12,14 @@ data Stm
   | Write Expr
   | Call Ident [Expr]
   | Skip
-  | -- If e1 s1 [(e2, s2)] (Just s3) ->
-    -- if e1 then s1 elif e2 then s2 else s3 fi
-    --
-    -- If e1 s1 [(e2, s2)] Nothing   ->
-    -- if e1 then s1 elif e2 then s2 fi
+  | -- | if $expr then $stm (elif $expr $stm)* [else $stm] fi
     If Expr Stm [(Expr, Stm)] (Maybe Stm)
   | While Expr Stm
   | Repeat Stm Expr
-  | For Stm Expr Stm Stm
-  | Return (Maybe Expr)
+  | -- | for $stm, $expr, $stm do $stm od
+    For Stm Expr Stm Stm
+  | -- | return [$expr]
+    Return (Maybe Expr)
   | Stm `Seq` Stm
   deriving stock (Show, Eq)
 

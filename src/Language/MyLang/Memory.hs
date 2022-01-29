@@ -10,11 +10,9 @@ module Language.MyLang.Memory
   )
 where
 
-import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
-import Data.Set (Set)
 import Data.Set qualified as Set
-import GHC.Generics (Generic)
+import Language.MyLang.Prelude
 import Prelude hiding (lookup)
 
 type Value = Int

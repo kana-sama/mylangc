@@ -23,6 +23,7 @@ default-extensions:
   - DuplicateRecordFields
   - MonadComprehensions
   - StandaloneDeriving
+  - StrictData
 
 ghc-options:
   - -Wunused-packages

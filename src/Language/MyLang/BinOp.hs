@@ -6,8 +6,7 @@ module Language.MyLang.BinOp
   )
 where
 
-import Control.Exception (Exception)
-import Control.Monad.Except
+import Language.MyLang.Prelude
 import Prelude hiding (any)
 
 data BinOp

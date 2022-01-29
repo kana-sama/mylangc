@@ -3,18 +3,10 @@
 
 module Language.MyLang.X86 where
 
-import Control.Exception (Exception, throwIO)
-import Control.Lens hiding (set, (:<), (:>))
-import Control.Monad.Except
-import Control.Monad.State
-import Control.Monad.Writer
-import Data.Foldable (traverse_)
-import Data.Generics.Labels ()
-import Data.List (intercalate)
-import Data.Set (Set)
+import Data.List qualified as List
 import Data.Set qualified as Set
-import GHC.Generics (Generic)
 import Language.MyLang.AST
+import Language.MyLang.Prelude
 import Language.MyLang.StackMachine qualified as SM
 import Prelude hiding (Ordering (..))
 
@@ -113,7 +105,7 @@ instance Pretty Instr where
     Label lbl -> lbl <> ":"
     where
       p :: String -> [Operand] -> String
-      p op ops = "\t" <> op <> " \t" <> intercalate ",\t" (map pretty ops)
+      p op ops = "\t" <> op <> " \t" <> List.intercalate ",\t" (map pretty ops)
 
 instance Pretty Prog where
   pretty = unlines . map pretty
