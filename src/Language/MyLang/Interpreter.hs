@@ -44,73 +44,89 @@ type M = StateT Config (ExceptT InterpreterError (Reader (Map Ident Definition))
 runM :: M a -> Map Ident Definition -> Config -> Either InterpreterError (a, Config)
 runM m defs config = runReader (runExceptT (runStateT m config)) defs
 
+lookupVar :: Ident -> M Value
+lookupVar var =
+  use (#memory . to (Memory.lookup var)) >>= \case
+    Nothing -> throwError (UnknownVariable var)
+    Just val -> pure val
+
+lookupDef :: Ident -> M Definition
+lookupDef name =
+  asks (Map.lookup name) >>= \case
+    Nothing -> throwError (UnknownFunction name)
+    Just def -> pure def
+
+input :: M Value
+input =
+  use #input >>= \case
+    [] -> throwError NotEnoughInput
+    val : input -> do
+      #input .= input
+      pure val
+
 evalExpr :: Expr -> M Value
 evalExpr = \case
   Lit val -> pure val
-  Var var ->
-    use (#memory . to (Memory.lookup var)) >>= \case
-      Nothing -> throwError (UnknownVariable var)
-      Just val -> pure val
+  Var var -> lookupVar var
   BinOp op expr1 expr2 -> do
     val1 <- evalExpr expr1
     val2 <- evalExpr expr2
     denoteBinOpM BinOpError op val1 val2
 
-evalStm :: Stm -> M ()
-evalStm = \case
+evalStm :: Stm -> Stm -> M ()
+evalStm k = \case
+  Skip
+    | k == Skip -> pure ()
+    | otherwise -> evalStm Skip k
   var := expr -> do
     val <- evalExpr expr
     #memory %= Memory.insert var val
+    evalStm Skip k
   Read var -> do
     #output <>= "> "
-    use #input >>= \case
-      [] -> throwError NotEnoughInput
-      val : input -> do
-        #input .= input
-        #memory %= Memory.insert var val
+    val <- input
+    #memory %= Memory.insert var val
+    evalStm Skip k
   Write expr -> do
     val <- evalExpr expr
-    #output <>= show val <> "\n"
+    #output <>= show val ++ "\n"
+    evalStm Skip k
   Call name args -> do
-    def <-
-      asks (Map.lookup name) >>= \case
-        Nothing -> throwError (UnknownFunction name)
-        Just def -> pure def
+    def <- lookupDef name
     vals <- traverse evalExpr args
     currentMem <- use #memory
     #memory %= Memory.enterWith (def.args ++ def.locals)
     for_ (zip def.args vals) \(var, val) -> do
       #memory %= Memory.insert var val
-    evalStm def.body
+    evalStm Skip def.body
     #memory %= Memory.leaveTo currentMem
-  Skip ->
-    pure ()
+    evalStm Skip k
   If cond then_ else_ -> do
     cond' <- evalExpr cond
     if cond' == 0
-      then evalStm else_
-      else evalStm then_
+      then evalStm k else_
+      else evalStm k then_
   While cond body -> do
     cond' <- evalExpr cond
     if cond' == 0
-      then pure ()
-      else do
-        evalStm body
-        evalStm (While cond body)
+      then evalStm Skip k
+      else evalStm (While cond body <> k) body
   Repeat body cond -> do
-    evalStm body
+    evalStm Skip body
     cond' <- evalExpr cond
     if cond' == 0
-      then evalStm (Repeat body cond)
-      else pure ()
+      then evalStm k (Repeat body cond)
+      else evalStm Skip k
   stm1 `Seq` stm2 -> do
-    evalStm stm1
-    evalStm stm2
+    evalStm (stm2 <> k) stm1
+  where
+    stm1 <> Skip = stm1
+    stm1 <> stm2 = stm1 `Seq` stm2
 
 evalUnit :: Unit -> M ()
 evalUnit Unit {body, defs} =
-  local (\_ -> Map.fromList [(d.name, d) | d <- defs]) do
-    evalStm body
+  local (Map.fromList [(d.name, d) | d <- defs] <>) do
+    evalStm Skip body
 
 interpret :: Unit -> [Int] -> IO String
 interpret unit input =
