@@ -24,6 +24,7 @@ instance Convert C.Stm A.Stm where
     var C.:= expr -> convert var A.:= convert expr
     C.Read var -> A.Read (convert var)
     C.Write expr -> A.Write (convert expr)
+    C.Call name args -> A.Call (convert name) [convert a | a <- args]
     C.Skip -> A.Skip
     C.If expr1 stm1 [] Nothing ->
       (A.If (convert expr1))
@@ -43,5 +44,13 @@ instance Convert C.Stm A.Stm where
       convert init `A.Seq` convert (C.While cond (body `C.Seq` step))
     stm1 `C.Seq` stm2 -> convert stm1 `A.Seq` convert stm2
 
-desugar :: C.Stm -> A.Stm
+instance Convert C.Definition A.Definition where
+  convert C.Definition {name, args, locals, body} =
+    A.Definition {name, args, locals, body = convert body}
+
+instance Convert C.Unit A.Unit where
+  convert C.Unit {body, defs} =
+    A.Unit {body = convert body, defs = [convert d | d <- defs]}
+
+desugar :: C.Unit -> A.Unit
 desugar = convert

@@ -132,8 +132,8 @@ data CodeGenError
 
 type M = ExceptT CodeGenError (StateT Config (Writer Prog))
 
-_label :: SM.Label -> Operand
-_label (SM.Label l) = M ("_label_" <> show l)
+_label :: String -> Operand
+_label l = M ("_" <> l)
 
 _global :: Ident -> M Operand
 _global var = do

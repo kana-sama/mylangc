@@ -1,7 +1,7 @@
 module Language.MyLang.StackMachineSpec where
 
-import Language.MyLang.StackMachine (compute)
+import Language.MyLang.StackMachine (compute, unitToProg)
 import Language.MyLang.TestData (mkSpec)
 
-spec = mkSpec "SM" \stm input -> do
-  compute stm [read l | l <- lines input]
+spec = mkSpec "SM" \unit input -> do
+  compute (unitToProg unit) [read l | l <- lines input]

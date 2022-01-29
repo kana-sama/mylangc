@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script src="https://unpkg.com/react@17/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@17/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+    <script type="text/babel">
+      function App() {
+        const [x, setX] = React.useState(10);
+        return (
+          <div>
+            <div>{x}</div>
+            <button onClick={() => setX((x) => x + 1)}>+</button>
+          </div>
+        );
+      }
+
+      function Code({ lines, active }) {
+        return (
+          <div class="code">
+            {lines.map((line, i) => (
+              <div
+                class={
+                  "code__line" + (i == active ? " code__line--active" : "")
+                }
+              >
+                <div class="code__number">{i}</div>
+                <div class="code__content ">{line}</div>
+              </div>
+            ))}
+          </div>
+        );
+      }
+
+      function Memory({ data }) {
+        return (
+          <div class="memory">
+            <table>
+              {Object.entries(data).map(([name, value]) => (
+                <tr>
+                  <td>{name}</td>
+                  <td>{value}</td>
+                </tr>
+              ))}
+            </table>
+          </div>
+        );
+      }
+
+      function Config({
+        config: {
+          frames,
+          halted,
+          input,
+          output,
+          stack,
+          memory: { local, global },
+        },
+      }) {
+        return (
+          <div class="config">
+            <div class="config__block">
+              <div class="config__block-name">Global memory</div>
+              <div class="config__block-content">
+                <Memory data={global} />
+              </div>
+            </div>
+            <div class="config__block">
+              <div class="config__block-name">Local memory</div>
+              <div class="config__block-content">
+                <Memory data={local} />
+              </div>
+            </div>
+            <div class="config__block">
+              <div class="config__block-name">Stack</div>
+              <div class="config__block-content">
+                {stack.map((line) => (
+                  <div>{line}</div>
+                ))}
+              </div>
+            </div>
+            <div class="config__block">
+              <div class="config__block-name">Frames</div>
+              <div class="config__block-content">
+                {frames.map(([position, _]) => (
+                  <div>{position}</div>
+                ))}
+              </div>
+            </div>
+            <div class="config__block">
+              <div class="config__block-name">Input</div>
+              <div class="config__block-content">
+                {input.map((line) => (
+                  <div>{line}</div>
+                ))}
+              </div>
+            </div>
+            <div class="config__block">
+              <div class="config__block-name">Output</div>
+              <div class="config__block-content">
+                <pre>{output}</pre>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      function Snapshot({ code, config }) {
+        return (
+          <div class="snapshot">
+            <div class="snapshot__code">
+              <Code lines={code} active={config.cursor} />
+            </div>
+            <div class="snapshot__config">
+              <Config config={config} />
+            </div>
+          </div>
+        );
+      }
+
+      function Debugger({ data: [code, configs] }) {
+        const maxSteps = configs.length - 1;
+        const [step, setStep] = React.useState(0);
+        React.useEffect(() => {
+          document.addEventListener("keydown", (event) => {
+            if (event.key == "ArrowRight")
+              setStep((step) => Math.min(step + 1, maxSteps));
+            if (event.key == "ArrowLeft")
+              setStep((step) => Math.max(step - 1, 0));
+          });
+        }, []);
+
+        return (
+          <div style={{ opacity: configs[step].halted ? 0.5 : 1 }}>
+            <input
+              type="range"
+              min={0}
+              max={configs.length - 1}
+              step={1}
+              value={step}
+              onChange={(e) => setStep(e.currentTarget.value)}
+            />
+            <Snapshot code={code} config={configs[step]} />
+          </div>
+        );
+      }
+
+      function App() {
+        const [data, setData] = React.useState(null);
+        const area = React.useRef();
+
+        function handleSubmit(event) {
+          event.preventDefault();
+          setData(JSON.parse(area.current.value));
+        }
+
+        if (data === null) {
+          return (
+            <div>
+              <div>Paste debug.json</div>
+              <form onSubmit={handleSubmit}>
+                <textarea ref={area}></textarea>
+                <input type="submit" />
+              </form>
+            </div>
+          );
+        }
+
+        return <Debugger data={data} />;
+      }
+
+      ReactDOM.render(<App />, document.getElementById("root"));
+    </script>
+    <style>
+      body {
+        font-family: monospace;
+      }
+
+      .snapshot {
+        display: flex;
+        flex-direction: row;
+      }
+
+      .snapshot__code {
+        width: 100%;
+        max-width: 500px;
+      }
+
+      .snapshot__config {
+        width: 200px;
+      }
+
+      .code {
+      }
+
+      .code__line {
+        display: flex;
+        flex-direction: row;
+      }
+
+      .code__line--active .code__number {
+        color: #555;
+        background-color: white;
+      }
+
+      .code__line--active .code__content {
+        color: white;
+        background-color: #555;
+      }
+
+      .code__number {
+        width: 50px;
+        color: white;
+        background-color: #555;
+        text-align: right;
+        padding-right: 5px;
+      }
+
+      .code__content {
+        width: 100%;
+        padding-left: 5px;
+      }
+
+      .config {
+        display: flex;
+        flex-direction: column;
+      }
+
+      .config__block {
+        background-color: #eee;
+        margin: 5px;
+        padding: 5px;
+      }
+
+      .config__block-name {
+        font-weight: bold;
+        margin-bottom: 4px;
+      }
+
+      .config__block-content {
+        background: white;
+        padding: 4px;
+      }
+
+      .memory {
+      }
+
+      .memory td:first-child {
+        font-weight: bold;
+      }
+
+      .memory td {
+        padding: 0;
+      }
+    </style>
+  </body>
+</html>

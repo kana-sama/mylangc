@@ -10,7 +10,7 @@ import Control.Exception (Exception (..), throwIO)
 import Control.Monad.Combinators.Expr
 import Data.Void (Void)
 import Language.MyLang.CST
-import Text.Megaparsec hiding (State, match, try)
+import Text.Megaparsec hiding (State, match)
 import Text.Megaparsec.Char
 import Text.Megaparsec.Char.Lexer qualified as L
 
@@ -25,20 +25,20 @@ lexeme = L.lexeme sc
 symbol :: String -> Parser String
 symbol = L.symbol sc
 
+parens :: Parser a -> Parser a
+parens = between (symbol "(") (symbol ")")
+
 integerL :: Parser Int
 integerL = lexeme L.decimal
 
-identL :: Parser Ident
-identL = lexeme ((:) <$> letterChar <*> many (alphaNumChar <|> oneOf "_") <?> "ident")
-
-parens :: Parser a -> Parser a
-parens = between (symbol "(") (symbol ")")
+ident :: Parser Ident
+ident = lexeme ((:) <$> letterChar <*> many (alphaNumChar <|> oneOf "_") <?> "ident")
 
 termP :: Parser Expr
 termP =
   choice
     [ parens exprP,
-      Var <$> identL,
+      Var <$> ident,
       Lit <$> integerL
     ]
 
@@ -74,14 +74,15 @@ stmP = foldr1 Seq <$> stm `sepBy1` symbol ";"
   where
     stm =
       choice
-        [ Read <$> (symbol "read" *> parens identL),
+        [ Read <$> (symbol "read" *> parens ident),
           Write <$> (symbol "write" *> parens exprP),
           Skip <$ symbol "skip",
           if_,
           for_,
           do symbol "while"; cond <- exprP; symbol "do"; body <- stmP; symbol "od"; pure (While cond body),
           do symbol "repeat"; body <- stmP; symbol "until"; cond <- exprP; pure (Repeat body cond),
-          do var <- identL; symbol ":="; expr <- exprP; pure (var := expr)
+          try do f <- ident; args <- parens (exprP `sepBy` symbol ","); pure (Call f args),
+          do var <- ident; symbol ":="; expr <- exprP; pure (var := expr)
         ]
 
     if_ = do
@@ -106,19 +107,35 @@ stmP = foldr1 Seq <$> stm `sepBy1` symbol ";"
       symbol "od"
       pure (For init cond step body)
 
+defP :: Parser Definition
+defP = do
+  name <- symbol "fun" *> ident
+  args <- parens (ident `sepBy` symbol ",")
+  locals <- option [] do symbol "local" *> (ident `sepBy` symbol ",")
+  body <- between (symbol "{") (symbol "}") stmP
+  pure Definition {name, args, locals, body}
+
+unitP :: Parser Unit
+unitP = do
+  sc
+  defs <- many defP
+  body <- stmP
+  eof
+  pure Unit {body, defs}
+
 data ParserError = ParserError String
   deriving stock (Show)
 
 instance Exception ParserError where
   displayException (ParserError s) = s
 
-parseSource :: FilePath -> String -> Either ParserError Stm
+parseSource :: FilePath -> String -> Either ParserError Unit
 parseSource path src =
-  case runParser (sc *> stmP <* eof) path src of
+  case runParser unitP path src of
     Right stm -> Right stm
     Left ex -> Left (ParserError (errorBundlePretty ex))
 
-parseFile :: FilePath -> IO Stm
+parseFile :: FilePath -> IO Unit
 parseFile path = do
   src <- readFile path
   case parseSource path src of

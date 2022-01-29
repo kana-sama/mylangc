@@ -1,5 +1,12 @@
+{-# LANGUAGE ImportQualifiedPost #-}
+
+import Control.Applicative
+import Data.Aeson
+import Data.ByteString.Lazy qualified as ByteString
+import Language.MyLang.Desugarer (desugar)
+import Language.MyLang.Memory (Memory)
 import Language.MyLang.Parser (parseFile)
-import Language.MyLang.StackMachine (compileStm)
+import Language.MyLang.StackMachine qualified as SM
 import Language.MyLang.X86 (compile)
 import Paths_mylangc (getDataFileName)
 import System.Environment (getArgs)
@@ -9,20 +16,32 @@ import System.IO (hClose)
 import System.IO.Temp (withSystemTempFile)
 import System.Process (rawSystem)
 
+deriving anyclass instance ToJSON SM.Config
+
+deriving anyclass instance ToJSON Memory
+
 main = do
   getArgs >>= \case
     ["--help"] -> do
       putStrLn help
     ["asm", srcPath] -> do
       base <- checkExtension srcPath
-      stm <- parseFile srcPath
-      asm <- compile (compileStm stm)
+      unit <- desugar <$> parseFile srcPath
+      asm <- compile (SM.unitToProg unit)
       writeFile (base <.> "s") asm
     ["build", srcPath] -> do
       base <- checkExtension srcPath
       withSystemTempFile (base <.> "s") \asmPath asmHandle -> do
         hClose asmHandle
         build srcPath asmPath base
+    ["sm-debug", srcPath] -> do
+      checkExtension srcPath
+      unit <- desugar <$> parseFile srcPath
+      input <- many [read x | x <- getLine, x /= ""]
+      let prog = SM.unitToProg unit
+      configs <- SM.computeWithDebug prog input
+      ByteString.writeFile "debug.json" (encode ([show i | i <- prog], configs))
+      pure ()
     ["run", srcPath] -> do
       base <- checkExtension srcPath
       withSystemTempFile (base <.> "s") \asmPath asmHandle -> do
@@ -45,8 +64,8 @@ main = do
           pure base
 
     build srcPath asmPath binPath = do
-      stm <- parseFile srcPath
-      asm <- compile (compileStm stm)
+      unit <- desugar <$> parseFile srcPath
+      asm <- compile (SM.unitToProg unit)
       writeFile asmPath asm
       runtimePath <- getDataFileName "runtime/runtime.o"
       ExitSuccess <- rawSystem "gcc" ["-o", binPath, asmPath, runtimePath]
@@ -58,5 +77,7 @@ main = do
           "  mylangc build SOURCE.mylang",
           "  mylangc run SOURCE.mylang",
           "  mylangc asm SOURCE.mylang",
-          "    Generate GAS assembly file"
+          "    Generate GAS assembly file",
+          "  mylangc sm-debug SOURCE.mylang",
+          "    Puts debug info to debug.json, open debug.html"
         ]

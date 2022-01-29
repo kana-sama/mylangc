@@ -1,7 +1,7 @@
 module Language.MyLang.TestData (mkSpec) where
 
 import Data.Functor ((<&>))
-import Language.MyLang.AST (Stm)
+import Language.MyLang.AST (Unit)
 import Language.MyLang.Desugarer (desugar)
 import Language.MyLang.Parser (parseFile)
 import System.FilePath ((<.>), (</>))
@@ -13,7 +13,7 @@ type Input = String
 
 type Output = String
 
-type Runner = (Stm -> Input -> IO Output)
+type Runner = (Unit -> Input -> IO Output)
 
 mkSpec :: String -> Runner -> IO TestTree
 mkSpec name run = do
@@ -27,10 +27,10 @@ dirTests dir name run = do
   tests <- getTests ("tests-data" </> dir)
   let cases =
         tests <&> \(sourcePath, inputPath, outputPath) -> testCase ("[" <> name <> "] " <> sourcePath) do
-          stm <- desugar <$> parseFile sourcePath
+          unit <- desugar <$> parseFile sourcePath
           input <- readFile inputPath
           output <- readFile outputPath
-          result <- run stm input
+          result <- run unit input
           result @?= output
   pure (testGroup ("[" <> name <> "] " <> dir) cases)
 

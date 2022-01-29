@@ -20,6 +20,9 @@ default-extensions:
   - NoFieldSelectors
   - FunctionalDependencies
   - MultiParamTypeClasses
+  - DuplicateRecordFields
+  - MonadComprehensions
+  - StandaloneDeriving
 
 ghc-options:
   - -Wunused-packages
@@ -39,6 +42,8 @@ executables:
       - filepath
       - temporary
       - process
+      - aeson
+      - bytestring
 
 library:
   source-dirs: src
@@ -61,7 +66,6 @@ tests:
       - mylangc
       - tasty
       - tasty-hunit
-      - tasty-fail-fast
       - filepath
       - filepattern
       - process

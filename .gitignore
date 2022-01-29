@@ -6,3 +6,5 @@ runtime/runtime.s
 example
 example.mylang
 example.s
+
+debug.json
