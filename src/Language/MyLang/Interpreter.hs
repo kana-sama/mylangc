@@ -2,9 +2,7 @@
 {-# LANGUAGE OverloadedRecordDot #-}
 
 module Language.MyLang.Interpreter
-  ( denoteBinOp,
-    BinOpResult (..),
-    InterpreterError (..),
+  ( InterpreterError (..),
     interpret,
   )
 where
@@ -20,6 +18,7 @@ import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import GHC.Generics (Generic)
 import Language.MyLang.AST
+import Language.MyLang.BinOp (BinOpError, denoteBinOpM)
 import Language.MyLang.Memory (Memory)
 import Language.MyLang.Memory qualified as Memory
 
@@ -35,48 +34,15 @@ data Config = Config {memory :: Memory, input :: Input, output :: Output}
 data InterpreterError
   = UnknownVariable Ident
   | UnknownFunction Ident
-  | DivideByZero
+  | BinOpError BinOpError
   | NotEnoughInput
   deriving stock (Show)
   deriving anyclass (Exception)
 
-type M = ReaderT (Map Ident Definition) (ExceptT InterpreterError (State Config))
+type M = StateT Config (ExceptT InterpreterError (Reader (Map Ident Definition)))
 
-data BinOpResult v
-  = BinOpDivideByZero
-  | BinOpOk v
-
-toBool :: Value -> Bool
-toBool 0 = False
-toBool _ = True
-
-fromBool :: Bool -> Value
-fromBool False = 0
-fromBool True = 1
-
-denoteBinOp :: BinOp -> (Value -> Value -> BinOpResult Value)
-denoteBinOp = \case
-  (:+) -> (+) --> BinOpOk
-  (:-) -> (-) --> BinOpOk
-  (:*) -> (*) --> BinOpOk
-  (:/) -> secondArgIsNotZero do quot --> BinOpOk
-  (:%) -> secondArgIsNotZero do rem --> BinOpOk
-  (:==) -> (==) --> BinOpOk . fromBool
-  (:!=) -> (/=) --> BinOpOk . fromBool
-  (:<=) -> (<=) --> BinOpOk . fromBool
-  (:<) -> (<) --> BinOpOk . fromBool
-  (:>=) -> (>=) --> BinOpOk . fromBool
-  (:>) -> (>) --> BinOpOk . fromBool
-  (:&&) -> toBool ==> (&&) --> BinOpOk . fromBool
-  (:!!) -> toBool ==> (||) --> BinOpOk . fromBool
-  where
-    infixr 8 -->
-
-    (==>) f binop = \a b -> binop (f a) (f b)
-    (-->) binop f = \a b -> f (binop a b)
-
-    secondArgIsNotZero _ _ 0 = BinOpDivideByZero
-    secondArgIsNotZero op v1 v2 = op v1 v2
+runM :: M a -> Map Ident Definition -> Config -> Either InterpreterError (a, Config)
+runM m defs config = runReader (runExceptT (runStateT m config)) defs
 
 evalExpr :: Expr -> M Value
 evalExpr = \case
@@ -88,9 +54,7 @@ evalExpr = \case
   BinOp op expr1 expr2 -> do
     val1 <- evalExpr expr1
     val2 <- evalExpr expr2
-    case denoteBinOp op val1 val2 of
-      BinOpDivideByZero -> throwError DivideByZero
-      BinOpOk val -> pure val
+    denoteBinOpM BinOpError op val1 val2
 
 evalStm :: Stm -> M ()
 evalStm = \case
@@ -123,22 +87,22 @@ evalStm = \case
     pure ()
   If cond then_ else_ -> do
     cond' <- evalExpr cond
-    if toBool cond'
-      then evalStm then_
-      else evalStm else_
+    if cond' == 0
+      then evalStm else_
+      else evalStm then_
   While cond body -> do
     cond' <- evalExpr cond
-    if toBool cond'
-      then do
+    if cond' == 0
+      then pure ()
+      else do
         evalStm body
         evalStm (While cond body)
-      else pure ()
   Repeat body cond -> do
     evalStm body
     cond' <- evalExpr cond
-    if toBool cond'
-      then pure ()
-      else evalStm (Repeat body cond)
+    if cond' == 0
+      then evalStm (Repeat body cond)
+      else pure ()
   stm1 `Seq` stm2 -> do
     evalStm stm1
     evalStm stm2
@@ -148,13 +112,10 @@ evalUnit Unit {body, defs} =
   local (\_ -> Map.fromList [(d.name, d) | d <- defs]) do
     evalStm body
 
-runM :: M a -> Memory -> Input -> Output -> (Memory, Input, Output, Either InterpreterError a)
-runM m memory input output =
-  case runState (runExceptT (runReaderT m Map.empty)) Config {memory, input, output} of
-    (result, Config {memory, input, output}) -> (memory, input, output, result)
-
 interpret :: Unit -> [Int] -> IO String
 interpret unit input =
-  case runM (evalUnit unit) Memory.empty input "" of
-    (_, _, _, Left ex) -> throwIO ex
-    (_, _, output, Right ()) -> pure output
+  case runM (evalUnit unit) Map.empty emptyConfig of
+    Left ex -> throwIO ex
+    Right ((), Config {output}) -> pure output
+  where
+    emptyConfig = Config {memory = Memory.empty, input, output = ""}

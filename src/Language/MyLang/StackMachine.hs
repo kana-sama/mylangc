@@ -25,7 +25,7 @@ import Data.Vector (Vector)
 import Data.Vector qualified as Vector
 import GHC.Generics (Generic)
 import Language.MyLang.AST
-import Language.MyLang.Interpreter (BinOpResult (..), denoteBinOp)
+import Language.MyLang.BinOp (BinOpError, denoteBinOpM)
 import Language.MyLang.Memory (Memory)
 import Language.MyLang.Memory qualified as Memory
 
@@ -56,7 +56,7 @@ data Config = Config
 
 data StackMachineError
   = UnknownVariable Ident
-  | DivideByZero
+  | BinOpError BinOpError
   | NotEnoughInput
   | EmptyStack
   | InvalidCursor Cursor
@@ -65,6 +65,9 @@ data StackMachineError
   deriving anyclass (Exception)
 
 type M = StateT Config (Except StackMachineError)
+
+runM :: M a -> Config -> Either StackMachineError (a, Config)
+runM m config = runExcept (runStateT m config)
 
 data Instr
   = PUSH Value
@@ -186,9 +189,8 @@ step labelTable prog = do
       BINOP op -> do
         val2 <- pop
         val1 <- pop
-        case denoteBinOp op val1 val2 of
-          BinOpDivideByZero -> throwError DivideByZero
-          BinOpOk val -> push val
+        val <- denoteBinOpM BinOpError op val1 val2
+        push val
         #cursor += 1
       READ -> do
         #output <>= "> "
@@ -257,9 +259,6 @@ evalProg prog = do
             step labelTable progV
             loop
   loop
-
-runM :: M a -> Config -> Either StackMachineError (a, Config)
-runM m config = runExcept (runStateT m config)
 
 mkInitialConfig :: Input -> Config
 mkInitialConfig input =
