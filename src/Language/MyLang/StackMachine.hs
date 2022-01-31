@@ -162,12 +162,9 @@ defToProg Definition {name, args, locals, body} = do
 
 unitToProg :: Unit -> Prog
 unitToProg Unit {body, defs} = gen do
-  tell [LABEL "main"]
-  tell [BEGIN "main" [] []]
-  stmToProg body
-  tell [PUSH 0]
-  tell [RET SaveResult]
-  tell [END]
+  let mainBody = body `Seq` Return (Just (Lit 0))
+  let main = Definition {name = "main", args = [], locals = [], body = mainBody}
+  defToProg main
   for_ defs \def -> do
     defToProg def
 
