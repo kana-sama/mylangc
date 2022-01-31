@@ -7,6 +7,7 @@ module Language.MyLang.Parser
 where
 
 import Control.Monad.Combinators.Expr
+import Data.Set qualified as Set
 import Language.MyLang.CST
 import Language.MyLang.Prelude
 import Text.Megaparsec hiding (State, match)
@@ -24,26 +25,43 @@ lexeme = L.lexeme sc
 symbol :: String -> Parser String
 symbol = L.symbol sc
 
-parens :: Parser a -> Parser a
-parens = between (symbol "(") (symbol ")")
+comma :: Parser ()
+comma = void (symbol ",")
 
-integerL :: Parser Int
+parens, braces, brackets :: Parser a -> Parser a
+parens = between (symbol "(") (symbol ")")
+braces = between (symbol "{") (symbol "}")
+brackets = between (symbol "[") (symbol "]")
+
+integerL :: Parser Integer
 integerL = lexeme L.decimal
 
+stringL :: Parser String
+stringL = lexeme (char '\"' *> manyTill L.charLiteral (char '\"'))
+
+charL :: Parser Char
+charL = lexeme (between (char '\'') (char '\'') L.charLiteral)
+
+keywords :: Set String
+keywords = Set.fromList ["for", "do", "od", "while", "repeat", "if", "elif", "then", "else", "fi", "skip", "fun", "local"]
+
 ident :: Parser Ident
-ident = lexeme ((:) <$> letterChar <*> many (alphaNumChar <|> oneOf "_") <?> "ident")
+ident = try do
+  name <- lexeme ((:) <$> letterChar <*> many (alphaNumChar <|> oneOf "_") <?> "ident")
+  guard (name `Set.notMember` keywords)
+  pure name
 
-termP :: Parser Expr
-termP =
-  choice
-    [ parens exprP,
-      try do name <- ident; args <- parens (exprP `sepBy` symbol ","); pure (Apply name args),
-      Var <$> ident,
-      Lit <$> integerL
-    ]
+idents :: Parser [Ident]
+idents = ident `sepBy` comma
 
-exprP :: Parser Expr
-exprP = makeExprParser termP operatorTable
+exprs :: Parser [Expr]
+exprs = expr `sepBy` comma
+
+expr :: Parser Expr
+expr = expr1
+
+expr1 :: Parser Expr
+expr1 = makeExprParser expr2 operatorTable
   where
     operatorTable =
       [ [ binary "*" (BinOp (:*)),
@@ -69,56 +87,89 @@ exprP = makeExprParser termP operatorTable
         binary :: String -> (Expr -> Expr -> Expr) -> Operator Parser Expr
         binary name f = InfixL (f <$ symbol name)
 
-stmP :: Parser Stm
-stmP = foldr1 Seq <$> stm `sepBy1` symbol ";"
+expr2 :: Parser Expr
+expr2 =
+  choice
+    [ try do e <- expr3; symbol "."; symbol "length"; pure (Length e),
+      expr3
+    ]
+
+expr3 :: Parser Expr
+expr3 =
+  choice
+    [ try do e <- expr4; ixes <- some (brackets expr); pure (foldl At e ixes),
+      expr4
+    ]
+
+expr4 :: Parser Expr
+expr4 =
+  choice
+    [ parens expr,
+      try do name <- ident; args <- parens exprs; pure (Apply name args),
+      Var <$> ident,
+      Number <$> integerL,
+      Array <$> brackets exprs,
+      String <$> stringL,
+      Char <$> charL
+    ]
+
+stm :: Parser Stm
+stm = foldr1 Seq <$> stm_ `sepBy1` symbol ";"
   where
-    stm =
+    stm_ =
       choice
         [ Skip <$ symbol "skip",
           if_,
           for_,
-          do symbol "while"; cond <- exprP; symbol "do"; body <- stmP; symbol "od"; pure (While cond body),
-          do symbol "repeat"; body <- stmP; symbol "until"; cond <- exprP; pure (Repeat body cond),
-          do symbol "return"; mexpr <- optional exprP; pure (Return mexpr),
-          try do f <- ident; args <- parens (exprP `sepBy` symbol ","); pure (Call f args),
-          do var <- ident; symbol ":="; expr <- exprP; pure (var := expr)
+          do symbol "while"; cond <- expr; symbol "do"; body <- stm; symbol "od"; pure (While cond body),
+          do symbol "repeat"; body <- stm; symbol "until"; cond <- expr; pure (Repeat body cond),
+          do symbol "return"; mexpr <- optional expr; pure (Return mexpr),
+          try do f <- ident; args <- parens exprs; pure (Call f args),
+          assign_
         ]
+
+    assign_ = do
+      var <- ident
+      ixes <- many (brackets expr)
+      symbol ":="
+      val <- expr
+      pure ((var, ixes) := val)
 
     if_ = do
       symbol "if"
-      cond <- exprP
+      cond <- expr
       symbol "then"
-      then_ <- stmP
-      elifs <- many do symbol "elif"; cond <- exprP; symbol "then"; body <- stmP; pure (cond, body)
-      else_ <- optional (symbol "else" *> stmP)
+      then_ <- stm
+      elifs <- many do symbol "elif"; cond <- expr; symbol "then"; body <- stm; pure (cond, body)
+      else_ <- optional (symbol "else" *> stm)
       symbol "fi"
       pure (If cond then_ elifs else_)
 
     for_ = do
       symbol "for"
-      init <- stmP
+      init <- stm
       symbol ","
-      cond <- exprP
+      cond <- expr
       symbol ","
-      step <- stmP
+      step <- stm
       symbol "do"
-      body <- stmP
+      body <- stm
       symbol "od"
       pure (For init cond step body)
 
-defP :: Parser Definition
-defP = do
+def :: Parser Definition
+def = do
   name <- symbol "fun" *> ident
-  args <- parens (ident `sepBy` symbol ",")
-  locals <- option [] do symbol "local" *> (ident `sepBy` symbol ",")
-  body <- between (symbol "{") (symbol "}") stmP
+  args <- parens idents
+  locals <- option [] do symbol "local" *> idents
+  body <- braces stm
   pure Definition {name, args, locals, body}
 
-unitP :: Parser Unit
-unitP = do
+unit :: Parser Unit
+unit = do
   sc
-  defs <- many defP
-  body <- stmP
+  defs <- many def
+  body <- stm
   eof
   pure Unit {body, defs}
 
@@ -130,7 +181,7 @@ instance Exception ParserError where
 
 parseSource :: FilePath -> String -> Either ParserError Unit
 parseSource path src =
-  case runParser unitP path src of
+  case runParser unit path src of
     Right stm -> Right stm
     Left ex -> Left (ParserError (errorBundlePretty ex))
 
@@ -140,3 +191,5 @@ parseFile path = do
   case parseSource path src of
     Right stm -> pure stm
     Left ex -> throwIO ex
+
+main = parseTest (expr <* eof) "a[1].length"

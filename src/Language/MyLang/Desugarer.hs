@@ -4,6 +4,7 @@
 
 module Language.MyLang.Desugarer (desugar) where
 
+import Data.Char qualified as Char
 import Language.MyLang.AST qualified as A
 import Language.MyLang.CST qualified as C
 
@@ -17,11 +18,20 @@ instance Convert C.BinOp A.BinOp where
   convert = id
 
 instance Convert C.Expr A.Expr where
-  convert = id
+  convert = \case
+    C.Number n -> A.Number n
+    C.Array es -> A.Array (convert <$> es)
+    C.String s -> A.String s
+    C.Char c -> A.Number (fromIntegral (Char.ord c))
+    C.Var v -> A.Var (convert v)
+    C.BinOp binop e1 e2 -> A.BinOp (convert binop) (convert e1) (convert e2)
+    C.Apply v es -> A.Apply (convert v) (convert <$> es)
+    C.At e1 e2 -> A.At (convert e1) (convert e2)
+    C.Length e -> A.Length (convert e)
 
 instance Convert C.Stm A.Stm where
   convert = \case
-    var C.:= expr -> convert var A.:= convert expr
+    (var, ixes) C.:= expr -> (convert var, convert <$> ixes) A.:= convert expr
     C.Call name args -> A.Call (convert name) (convert <$> args)
     C.Skip -> A.Skip
     C.If expr1 stm1 [] Nothing ->

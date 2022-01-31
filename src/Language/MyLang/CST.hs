@@ -4,10 +4,22 @@ module Language.MyLang.CST
   )
 where
 
-import Language.MyLang.AST (BinOp (..), Definition' (..), Expr (..), Ident (..), Unit' (..))
+import Language.MyLang.AST (BinOp (..), Definition' (..), Ident (..), Unit' (..))
+
+data Expr
+  = Number Integer
+  | Array [Expr]
+  | String String
+  | Char Char
+  | Var Ident
+  | BinOp BinOp Expr Expr
+  | Apply Ident [Expr]
+  | At Expr Expr
+  | Length Expr
+  deriving stock (Show, Eq)
 
 data Stm
-  = Ident := Expr
+  = (Ident, [Expr]) := Expr
   | Call Ident [Expr]
   | Skip
   | -- | if $expr then $stm (elif $expr $stm)* [else $stm] fi

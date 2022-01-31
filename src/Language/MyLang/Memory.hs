@@ -12,12 +12,10 @@ where
 
 import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
+import Language.MyLang.AST (Ident)
 import Language.MyLang.Prelude
+import Language.MyLang.Runtime (Value (..))
 import Prelude hiding (lookup)
-
-type Value = Int
-
-type Ident = String
 
 data Memory = Memory
   { global :: Map Ident Value,
@@ -40,7 +38,7 @@ lookup var Memory {global, local, locals}
   | otherwise = Map.lookup var global
 
 enterWith :: [Ident] -> Memory -> Memory
-enterWith locals Memory {global} = Memory {global, local = Map.fromList [(v, 0) | v <- locals], locals = Set.fromList locals}
+enterWith locals Memory {global} = Memory {global, local = Map.fromList [(v, VNumber 0) | v <- locals], locals = Set.fromList locals}
 
 leaveTo :: Memory -> Memory -> Memory
 leaveTo Memory {local, locals} Memory {global} = Memory {global, local, locals}

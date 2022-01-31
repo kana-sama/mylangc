@@ -16,17 +16,11 @@ where
 import Data.Map.Strict qualified as Map
 import Data.Vector qualified as Vector
 import Language.MyLang.AST
-import Language.MyLang.BinOp (BinOpError, denoteBinOpM)
-import Language.MyLang.BuiltIn (BuiltInError, denoteBuiltInM, lookupBuiltIn)
 import Language.MyLang.Memory (Memory)
 import Language.MyLang.Memory qualified as Memory
 import Language.MyLang.Prelude
-
-type Value = Int
-
-type Input = [Value]
-
-type Output = String
+import Language.MyLang.Runtime (RuntimeError, Value (..), denoteBinOpM, denoteBuiltInM, lookupBuiltIn)
+import Language.MyLang.Runtime qualified as Runtime
 
 type Stack = [Value]
 
@@ -42,16 +36,15 @@ data Config = Config
     frames :: Frames,
     stack :: Stack,
     memory :: Memory,
-    input :: Input,
-    output :: Output
+    input :: [Integer],
+    output :: String
   }
   deriving stock (Generic)
 
 data StackMachineError
   = UnknownVariable Ident
   | UnknownFunction Label
-  | BinOpError BinOpError
-  | BuiltInError BuiltInError
+  | RuntimeError RuntimeError
   | EmptyStack
   | InvalidCursor Cursor
   | ProgramIsHalted
@@ -67,10 +60,12 @@ data ResultAction = IgnoreResult | SaveResult
   deriving stock (Show, Eq)
 
 data Instr
-  = PUSH Value
+  = NUMBER Integer
+  | STRING String
   | BINOP BinOp
   | LOAD Ident
   | SAVE Ident
+  | SAVE_AT {var :: Ident, depth :: Int}
   | JMP Label
   | JMPZ Label
   | CALL {arity :: Int, resultAction :: ResultAction, name :: Label}
@@ -84,7 +79,14 @@ type Prog = [Instr]
 
 exprToProg :: Expr -> Prog
 exprToProg = \case
-  Lit val -> [PUSH val]
+  Number n -> [NUMBER n]
+  String s -> [STRING s]
+  Array xs ->
+    concat
+      [ exprToProg (Number (fromIntegral (length xs))),
+        concatMap exprToProg xs,
+        [CALL (length xs + 1) SaveResult "$array"]
+      ]
   Var var -> [LOAD var]
   BinOp op expr1 expr2 ->
     concat
@@ -93,8 +95,18 @@ exprToProg = \case
         [BINOP op]
       ]
   Apply f args ->
-    concatMap exprToProg args
-      ++ [CALL (length args) SaveResult f]
+    concat
+      [ concatMap exprToProg args,
+        [CALL (length args) SaveResult f]
+      ]
+  At expr1 expr2 ->
+    concat
+      [ exprToProg expr2,
+        exprToProg expr1,
+        [CALL 2 SaveResult "$at"]
+      ]
+  Length expr ->
+    exprToProg expr ++ [CALL 1 SaveResult "$length"]
 
 type GenM = StateT Int (Writer Prog)
 
@@ -103,9 +115,13 @@ gen g = execWriter (execStateT g 0)
 
 stmToProg :: Stm -> GenM ()
 stmToProg = \case
-  var := expr -> do
+  (var, []) := expr -> do
     tell (exprToProg expr)
     tell [SAVE var]
+  (var, ixes) := expr -> do
+    for_ ixes \ix -> tell (exprToProg ix)
+    tell (exprToProg expr)
+    tell [SAVE_AT var (length ixes)]
   Call f args -> do
     for_ args \arg -> do
       tell (exprToProg arg)
@@ -157,7 +173,7 @@ defToProg Definition {name, args, locals, body} = do
 
 unitToProg :: Unit -> Prog
 unitToProg Unit {body, defs} = gen do
-  let mainBody = body `Seq` Return (Just (Lit 0))
+  let mainBody = body `Seq` Return (Just (Number 0))
   let main = Definition {name = "main", args = [], locals = [], body = mainBody}
   defToProg main
   for_ defs \def -> do
@@ -174,6 +190,13 @@ pop =
       #stack .= stack
       pure val
 
+load :: Ident -> M Value
+load var = do
+  mval <- uses #memory (Memory.lookup var)
+  case mval of
+    Nothing -> throwError (UnknownVariable var)
+    Just val -> pure val
+
 step :: Map Label Int -> Vector Instr -> M ()
 step labelTable prog = do
   halted <- use #halted
@@ -183,32 +206,40 @@ step labelTable prog = do
   case prog Vector.!? cursor of
     Nothing -> throwError (InvalidCursor cursor)
     Just instr -> case instr of
-      PUSH val -> do
-        push val
+      NUMBER n -> do
+        push (Runtime.valueFromInteger n)
+        #cursor += 1
+      STRING s -> do
+        push (Runtime.valueFromString s)
         #cursor += 1
       BINOP op -> do
         val2 <- pop
         val1 <- pop
-        val <- denoteBinOpM BinOpError op val1 val2
+        val <- denoteBinOpM RuntimeError op val1 val2
         push val
         #cursor += 1
       LOAD var -> do
-        mval <- uses #memory (Memory.lookup var)
-        case mval of
-          Nothing -> throwError (UnknownVariable var)
-          Just val -> push val
+        val <- load var
+        push val
         #cursor += 1
       SAVE var -> do
         val <- pop
         #memory %= Memory.insert var val
         #cursor += 1
+      SAVE_AT var n -> do
+        val <- pop
+        ixes <- replicateM n pop
+        obj <- load var
+        obj' <- Runtime.updateM RuntimeError obj (reverse ixes) val
+        #memory %= Memory.insert var obj'
+        #cursor += 1
       JMP label -> do
         #cursor .= labelTable Map.! label
       JMPZ label -> do
-        val <- pop
-        if val == 0
-          then #cursor .= labelTable Map.! label
-          else #cursor += 1
+        val <- Runtime.toBool RuntimeError =<< pop
+        if val
+          then #cursor += 1
+          else #cursor .= labelTable Map.! label
       CALL arity _ label -> do
         case (labelTable Map.!? label, lookupBuiltIn label) of
           (Just pos, _) -> do
@@ -217,7 +248,7 @@ step labelTable prog = do
             #cursor .= pos
           (Nothing, Just builtin) -> do
             vals <- replicateM arity pop
-            result <- denoteBuiltInM BuiltInError #input #output builtin vals
+            result <- denoteBuiltInM RuntimeError #input #output builtin (reverse vals)
             for_ result push
             #cursor += 1
           (Nothing, Nothing) -> do
@@ -228,7 +259,7 @@ step labelTable prog = do
           val <- pop
           #memory %= Memory.insert var val
         for_ locals \var -> do
-          #memory %= Memory.insert var 0
+          #memory %= Memory.insert var (VNumber 0)
         #cursor += 1
       END -> ret
       RET _ -> ret
@@ -261,25 +292,25 @@ evalProg prog = do
             loop
   loop
 
-mkInitialConfig :: Input -> Config
-mkInitialConfig input =
+emptyConfig :: Config
+emptyConfig =
   Config
     { halted = False,
       cursor = 0,
       frames = [],
       stack = [],
       memory = Memory.empty,
-      input,
+      input = [],
       output = ""
     }
 
-compute :: Prog -> Input -> IO Output
+compute :: Prog -> [Integer] -> IO String
 compute prog input = do
-  case runM (evalProg prog) (mkInitialConfig input) of
+  case runM (evalProg prog) emptyConfig {input} of
     Left ex -> throwIO ex
     Right ((), Config {output}) -> pure output
 
-computeWithDebug :: Prog -> Input -> IO [Config]
+computeWithDebug :: Prog -> [Integer] -> IO [Config]
 computeWithDebug prog input = do
   let (labelTable, progV) = prebuild prog
   let loop :: Config -> IO [Config]
@@ -291,6 +322,6 @@ computeWithDebug prog input = do
             Right ((), config) -> do
               configs <- loop config
               pure (config : configs)
-  let initialConfig = mkInitialConfig input
+  let initialConfig = emptyConfig {input}
   configs <- loop initialConfig
   pure (initialConfig : configs)

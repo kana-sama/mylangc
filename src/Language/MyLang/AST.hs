@@ -1,22 +1,36 @@
-module Language.MyLang.AST
-  ( module Language.MyLang.AST,
-    module Language.MyLang.BinOp,
-  )
-where
-
-import Language.MyLang.BinOp (BinOp (..))
+module Language.MyLang.AST where
 
 type Ident = String
 
+data BinOp
+  = (:+)
+  | (:-)
+  | (:*)
+  | (:/)
+  | (:%)
+  | (:==)
+  | (:!=)
+  | (:<=)
+  | (:<)
+  | (:>=)
+  | (:>)
+  | (:&&)
+  | (:!!)
+  deriving stock (Show, Eq)
+
 data Expr
-  = Lit Int
+  = Number Integer
+  | Array [Expr]
+  | String String
   | Var Ident
   | BinOp BinOp Expr Expr
   | Apply Ident [Expr]
+  | At Expr Expr
+  | Length Expr
   deriving stock (Show, Eq)
 
 data Stm
-  = Ident := Expr
+  = (Ident, [Expr]) := Expr
   | Call Ident [Expr]
   | Skip
   | If Expr Stm Stm

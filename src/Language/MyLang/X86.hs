@@ -234,8 +234,7 @@ comparisonBinOp binop = do (y, x) <- _pop2; xorq rax rax; movq y rdx; cmpq rdx x
 
 toX86 :: SM.Prog -> M ()
 toX86 = traverse_ \case
-  SM.PUSH val -> do
-    movq (Imm val) =<< _allocate
+  -- SM.PUSH val -> movq (Imm val) =<< _allocate
   SM.BINOP (:+) -> simpleBinOp (:+)
   SM.BINOP (:-) -> simpleBinOp (:-)
   SM.BINOP (:*) -> simpleBinOp (:*)

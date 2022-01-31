@@ -9,26 +9,19 @@ where
 
 import Data.Map.Strict qualified as Map
 import Language.MyLang.AST
-import Language.MyLang.BinOp (BinOpError, denoteBinOpM)
-import Language.MyLang.BuiltIn (BuiltInError, denoteBuiltInM, lookupBuiltIn)
 import Language.MyLang.Memory (Memory)
 import Language.MyLang.Memory qualified as Memory
 import Language.MyLang.Prelude
+import Language.MyLang.Runtime (RuntimeError, Value (..), denoteBinOpM, denoteBuiltInM, lookupBuiltIn)
+import Language.MyLang.Runtime qualified as Runtime
 
-type Value = Int
-
-type Input = [Value]
-
-type Output = String
-
-data Config = Config {memory :: Memory, input :: Input, output :: Output}
+data Config = Config {memory :: Memory, input :: [Integer], output :: String}
   deriving stock (Generic)
 
 data InterpreterError
   = UnknownVariable Ident
   | UnknownFunction Ident
-  | BinOpError BinOpError
-  | BuiltInError BuiltInError
+  | RuntimeError RuntimeError
   | NoResultFromFunction Ident
   deriving stock (Show)
   deriving anyclass (Exception)
@@ -58,7 +51,7 @@ lookupFunction name = do
       #memory %= Memory.leaveTo currentMem
       pure result
     (Nothing, Just builtin) -> pure \vals -> do
-      denoteBuiltInM BuiltInError #input #output builtin vals
+      denoteBuiltInM RuntimeError #input #output builtin vals
     (Nothing, Nothing) -> do
       throwError (UnknownFunction name)
 
@@ -70,46 +63,70 @@ call name args = do
 
 evalExpr :: Expr -> M Value
 evalExpr = \case
-  Lit val -> pure val
+  Number n -> do
+    pure (Runtime.valueFromInteger n)
+  Array exprs -> do
+    vals <- traverse evalExpr exprs
+    pure (Runtime.valueFromList vals)
+  String str -> do
+    pure (Runtime.valueFromString str)
   Var var -> lookupVar var
   BinOp op expr1 expr2 -> do
     val1 <- evalExpr expr1
     val2 <- evalExpr expr2
-    denoteBinOpM BinOpError op val1 val2
+    denoteBinOpM RuntimeError op val1 val2
   Apply name args -> do
     mval <- call name args
-    case mval of
-      Nothing -> throwError (NoResultFromFunction name)
-      Just val -> pure val
+    expectResult name mval
+  At e1 e2 -> do
+    i <- evalExpr e2
+    x <- evalExpr e1
+    mval <- denoteBuiltInM RuntimeError #input #output Runtime._at [i, x]
+    expectResult "$at" mval
+  Length expr -> do
+    val <- evalExpr expr
+    mval <- denoteBuiltInM RuntimeError #input #output Runtime._length [val]
+    expectResult "$length" mval
+  where
+    expectResult :: Ident -> Maybe Value -> M Value
+    expectResult name Nothing = throwError (NoResultFromFunction name)
+    expectResult name (Just x) = pure x
 
-evalStm :: Stm -> Stm -> M (Maybe Int)
+evalStm :: Stm -> Stm -> M (Maybe Value)
 evalStm k = \case
   Skip
     | k == Skip -> pure Nothing
     | otherwise -> evalStm Skip k
-  var := expr -> do
+  (var, []) := expr -> do
     val <- evalExpr expr
     #memory %= Memory.insert var val
+    evalStm Skip k
+  (var, ixes) := expr -> do
+    ixes' <- traverse evalExpr ixes
+    val <- evalExpr expr
+    obj <- lookupVar var
+    result <- Runtime.updateM RuntimeError obj ixes' val
+    #memory %= Memory.insert var result
     evalStm Skip k
   Call name args -> do
     call name args
     evalStm Skip k
   If cond then_ else_ -> do
-    cond' <- evalExpr cond
-    if cond' == 0
-      then evalStm k else_
-      else evalStm k then_
+    cond' <- Runtime.toBool RuntimeError =<< evalExpr cond
+    if cond'
+      then evalStm k then_
+      else evalStm k else_
   While cond body -> do
-    cond' <- evalExpr cond
-    if cond' == 0
-      then evalStm Skip k
-      else evalStm (While cond body <> k) body
+    cond' <- Runtime.toBool RuntimeError =<< evalExpr cond
+    if cond'
+      then evalStm (While cond body <> k) body
+      else evalStm Skip k
   Repeat body cond -> do
     evalStm Skip body
-    cond' <- evalExpr cond
-    if cond' == 0
-      then evalStm k (Repeat body cond)
-      else evalStm Skip k
+    cond' <- Runtime.toBool RuntimeError =<< evalExpr cond
+    if cond'
+      then evalStm Skip k
+      else evalStm k (Repeat body cond)
   Return Nothing -> do
     pure Nothing
   Return (Just expr) -> do
@@ -127,7 +144,7 @@ evalUnit Unit {body, defs} =
     evalStm Skip body
     pure ()
 
-interpret :: Unit -> [Int] -> IO String
+interpret :: Unit -> [Integer] -> IO String
 interpret unit input =
   case runM (evalUnit unit) Map.empty emptyConfig of
     Left ex -> throwIO ex

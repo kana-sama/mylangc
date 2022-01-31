@@ -9,10 +9,10 @@ main :: IO ()
 main = do
   interpreter <- Interpreter.spec
   stackMachine <- StackMachine.spec
-  x86 <- X86.spec
+  -- x86 <- X86.spec
   defaultMain do
     (testGroup "generated tests")
       [ interpreter,
-        stackMachine,
-        x86
+        stackMachine
+        -- ,  x86
       ]

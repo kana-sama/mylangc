@@ -58,6 +58,7 @@ library:
     - mtl
     - containers
     - vector
+    - bytestring
     - megaparsec
     - parser-combinators
 

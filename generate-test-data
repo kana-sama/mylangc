@@ -57,8 +57,6 @@ echo
 echo "Generating regressions tests"
 generate "$tmp/regression" "test" "tests-data/regression"
 
-rm tests-data/regression/test0{34..36}.*
-
 # echo "Generating expressions tests"
 # generate "$tmp/regression/expressions" "generated" "tests-data/expressions"
 

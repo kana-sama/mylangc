@@ -6,6 +6,7 @@ import Data.ByteString.Lazy qualified as ByteString
 import Language.MyLang.Desugarer (desugar)
 import Language.MyLang.Memory (Memory)
 import Language.MyLang.Parser (parseFile)
+import Language.MyLang.Runtime qualified as Runtime
 import Language.MyLang.StackMachine qualified as SM
 import Language.MyLang.X86 (compile)
 import Paths_mylangc (getDataFileName)
@@ -15,10 +16,6 @@ import System.FilePath (stripExtension, (<.>))
 import System.IO (hClose)
 import System.IO.Temp (withSystemTempFile)
 import System.Process (rawSystem)
-
-deriving anyclass instance ToJSON SM.Config
-
-deriving anyclass instance ToJSON Memory
 
 main = do
   getArgs >>= \case
@@ -34,14 +31,13 @@ main = do
       withSystemTempFile (base <.> "s") \asmPath asmHandle -> do
         hClose asmHandle
         build srcPath asmPath base
-    ["sm-debug", srcPath] -> do
-      checkExtension srcPath
-      unit <- desugar <$> parseFile srcPath
-      input <- many [read x | x <- getLine, x /= ""]
-      let prog = SM.unitToProg unit
-      configs <- SM.computeWithDebug prog input
-      ByteString.writeFile "debug.json" (encode ([show i | i <- prog], configs))
-      pure ()
+    -- ["sm-debug", srcPath] -> do
+    --   checkExtension srcPath
+    --   unit <- desugar <$> parseFile srcPath
+    --   input <- many [read x | x <- getLine, x /= ""]
+    --   let prog = SM.unitToProg unit
+    --   configs <- SM.computeWithDebug prog input
+    --   ByteString.writeFile "debug.json" (encode ([show i | i <- prog], configs))
     ["run", srcPath] -> do
       base <- checkExtension srcPath
       withSystemTempFile (base <.> "s") \asmPath asmHandle -> do
