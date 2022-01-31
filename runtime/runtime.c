@@ -1,7 +1,7 @@
 #include <stdio.h>
 
 
-extern long int Lread() {
+extern long int read() {
   long int result;
 
   printf("> ");
@@ -11,7 +11,7 @@ extern long int Lread() {
   return result;
 }
 
-extern void Lwrite(long int n) {
+extern void write(long int n) {
   printf("%ld\n", n);
   fflush(stdout);
 }

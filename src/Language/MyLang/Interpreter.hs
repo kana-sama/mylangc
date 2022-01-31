@@ -10,6 +10,7 @@ where
 import Data.Map.Strict qualified as Map
 import Language.MyLang.AST
 import Language.MyLang.BinOp (BinOpError, denoteBinOpM)
+import Language.MyLang.BuiltIn (BuiltInError, denoteBuiltInM, lookupBuiltIn)
 import Language.MyLang.Memory (Memory)
 import Language.MyLang.Memory qualified as Memory
 import Language.MyLang.Prelude
@@ -27,8 +28,8 @@ data InterpreterError
   = UnknownVariable Ident
   | UnknownFunction Ident
   | BinOpError BinOpError
+  | BuiltInError BuiltInError
   | NoResultFromFunction Ident
-  | NotEnoughInput
   deriving stock (Show)
   deriving anyclass (Exception)
 
@@ -44,33 +45,28 @@ lookupVar var = do
     Nothing -> throwError (UnknownVariable var)
     Just val -> pure val
 
-lookupDef :: Ident -> M Definition
-lookupDef name = do
-  mdef <- asks (Map.lookup name)
-  case mdef of
-    Nothing -> throwError (UnknownFunction name)
-    Just def -> pure def
-
-input :: M Value
-input = do
-  input <- use #input
-  case input of
-    [] -> throwError NotEnoughInput
-    val : input -> do
-      #input .= input
-      pure val
+lookupFunction :: Ident -> M ([Value] -> M (Maybe Value))
+lookupFunction name = do
+  defs <- ask
+  case (Map.lookup name defs, lookupBuiltIn name) of
+    (Just def, _) -> pure \vals -> do
+      currentMem <- use #memory
+      #memory %= Memory.enterWith (def.args ++ def.locals)
+      for_ (zip def.args vals) \(var, val) -> do
+        #memory %= Memory.insert var val
+      result <- evalStm Skip def.body
+      #memory %= Memory.leaveTo currentMem
+      pure result
+    (Nothing, Just builtin) -> pure \vals -> do
+      denoteBuiltInM BuiltInError #input #output builtin vals
+    (Nothing, Nothing) -> do
+      throwError (UnknownFunction name)
 
 call :: Ident -> [Expr] -> M (Maybe Value)
 call name args = do
-  def <- lookupDef name
+  fun <- lookupFunction name
   vals <- traverse evalExpr args
-  currentMem <- use #memory
-  #memory %= Memory.enterWith (def.args ++ def.locals)
-  for_ (zip def.args vals) \(var, val) -> do
-    #memory %= Memory.insert var val
-  result <- evalStm Skip def.body
-  #memory %= Memory.leaveTo currentMem
-  pure result
+  fun vals
 
 evalExpr :: Expr -> M Value
 evalExpr = \case
@@ -94,15 +90,6 @@ evalStm k = \case
   var := expr -> do
     val <- evalExpr expr
     #memory %= Memory.insert var val
-    evalStm Skip k
-  Read var -> do
-    #output <>= "> "
-    val <- input
-    #memory %= Memory.insert var val
-    evalStm Skip k
-  Write expr -> do
-    val <- evalExpr expr
-    #output <>= show val ++ "\n"
     evalStm Skip k
   Call name args -> do
     call name args

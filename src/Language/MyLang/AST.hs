@@ -17,8 +17,6 @@ data Expr
 
 data Stm
   = Ident := Expr
-  | Read Ident
-  | Write Expr
   | Call Ident [Expr]
   | Skip
   | If Expr Stm Stm

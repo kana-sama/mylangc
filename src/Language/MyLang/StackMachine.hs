@@ -17,6 +17,7 @@ import Data.Map.Strict qualified as Map
 import Data.Vector qualified as Vector
 import Language.MyLang.AST
 import Language.MyLang.BinOp (BinOpError, denoteBinOpM)
+import Language.MyLang.BuiltIn (BuiltInError, denoteBuiltInM, lookupBuiltIn)
 import Language.MyLang.Memory (Memory)
 import Language.MyLang.Memory qualified as Memory
 import Language.MyLang.Prelude
@@ -48,8 +49,9 @@ data Config = Config
 
 data StackMachineError
   = UnknownVariable Ident
+  | UnknownFunction Label
   | BinOpError BinOpError
-  | NotEnoughInput
+  | BuiltInError BuiltInError
   | EmptyStack
   | InvalidCursor Cursor
   | ProgramIsHalted
@@ -67,8 +69,6 @@ data ResultAction = IgnoreResult | SaveResult
 data Instr
   = PUSH Value
   | BINOP BinOp
-  | READ
-  | WRITE
   | LOAD Ident
   | SAVE Ident
   | JMP Label
@@ -106,11 +106,6 @@ stmToProg = \case
   var := expr -> do
     tell (exprToProg expr)
     tell [SAVE var]
-  Read var -> do
-    tell [READ, SAVE var]
-  Write expr -> do
-    tell (exprToProg expr)
-    tell [WRITE]
   Call f args -> do
     for_ args \arg -> do
       tell (exprToProg arg)
@@ -197,18 +192,6 @@ step labelTable prog = do
         val <- denoteBinOpM BinOpError op val1 val2
         push val
         #cursor += 1
-      READ -> do
-        #output <>= "> "
-        use #input >>= \case
-          [] -> throwError NotEnoughInput
-          val : input -> do
-            #input .= input
-            push val
-        #cursor += 1
-      WRITE -> do
-        val <- pop
-        #output <>= show val <> "\n"
-        #cursor += 1
       LOAD var -> do
         mval <- uses #memory (Memory.lookup var)
         case mval of
@@ -226,10 +209,19 @@ step labelTable prog = do
         if val == 0
           then #cursor .= labelTable Map.! label
           else #cursor += 1
-      CALL _ _ label -> do
-        mem <- use #memory
-        #frames %= ((cursor + 1, mem) :)
-        #cursor .= labelTable Map.! label
+      CALL arity _ label -> do
+        case (labelTable Map.!? label, lookupBuiltIn label) of
+          (Just pos, _) -> do
+            mem <- use #memory
+            #frames %= ((cursor + 1, mem) :)
+            #cursor .= pos
+          (Nothing, Just builtin) -> do
+            vals <- replicateM arity pop
+            result <- denoteBuiltInM BuiltInError #input #output builtin vals
+            for_ result push
+            #cursor += 1
+          (Nothing, Nothing) -> do
+            throwError (UnknownFunction label)
       BEGIN _name args locals -> do
         #memory %= Memory.enterWith (args ++ locals)
         for_ (reverse args) \var -> do
@@ -295,7 +287,7 @@ computeWithDebug prog input = do
         if config.halted
           then pure []
           else case runM (step labelTable progV) config of
-            Left ex -> throwIO ex
+            Left ex -> pure [config]
             Right ((), config) -> do
               configs <- loop config
               pure (config : configs)

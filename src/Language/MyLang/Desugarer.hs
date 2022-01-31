@@ -22,8 +22,6 @@ instance Convert C.Expr A.Expr where
 instance Convert C.Stm A.Stm where
   convert = \case
     var C.:= expr -> convert var A.:= convert expr
-    C.Read var -> A.Read (convert var)
-    C.Write expr -> A.Write (convert expr)
     C.Call name args -> A.Call (convert name) (convert <$> args)
     C.Skip -> A.Skip
     C.If expr1 stm1 [] Nothing ->

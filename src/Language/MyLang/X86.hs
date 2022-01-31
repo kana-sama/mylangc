@@ -265,13 +265,6 @@ toX86 = traverse_ \case
     setne al
     movzbq al rax
     movq rax =<< _allocate
-  SM.READ -> do
-    callq (Lbl "Lread")
-    movq rax =<< _allocate
-  SM.WRITE -> do
-    val <- _pop
-    movq val rdi
-    callq (Lbl "Lwrite")
   SM.LOAD var -> do
     src <- resolveVar var
     tgt <- _allocate

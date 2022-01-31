@@ -25,6 +25,7 @@ default-extensions:
   - StandaloneDeriving
   - StrictData
   - PartialTypeSignatures
+  - RankNTypes
 
 ghc-options:
   - -Wunused-packages

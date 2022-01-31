@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 repo="git@github.com:ivan-magda/compiler-workout.git"
-branch="hw7"
+branch="hw9"
 
 tmp=$(mktemp -d)
 
@@ -57,12 +57,7 @@ echo
 echo "Generating regressions tests"
 generate "$tmp/regression" "test" "tests-data/regression"
 
-echo "Remove fake input"
-for i in 24 25 26 27 32 33; do
-  file="tests-data/regression/test0${i}.mylang.output"
-  sed '1s/^..//' $file > $file~
-  mv $file~ $file
-done
+rm tests-data/regression/test0{34..36}.*
 
 # echo "Generating expressions tests"
 # generate "$tmp/regression/expressions" "generated" "tests-data/expressions"

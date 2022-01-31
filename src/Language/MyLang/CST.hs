@@ -8,8 +8,6 @@ import Language.MyLang.AST (BinOp (..), Definition' (..), Expr (..), Ident (..),
 
 data Stm
   = Ident := Expr
-  | Read Ident
-  | Write Expr
   | Call Ident [Expr]
   | Skip
   | -- | if $expr then $stm (elif $expr $stm)* [else $stm] fi
