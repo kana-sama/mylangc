@@ -19,9 +19,16 @@ mkSpec :: String -> Runner -> IO TestTree
 mkSpec name run = do
   custom <- dirTests "custom" name run
   regression <- dirTests "regression" name run
+  let expressions = testGroup "" []
   -- expressions <- dirTests "expressions" name run
+  let deep_expressions = testGroup "" []
   -- deep_expressions <- dirTests "deep-expressions" name run
-  pure (testGroup ("[" <> name <> "] tests-data") [custom, regression])
+  (pure . testGroup ("[" <> name <> "] tests-data"))
+    [ custom,
+      regression,
+      expressions,
+      deep_expressions
+    ]
 
 dirTests :: FilePath -> String -> Runner -> IO TestTree
 dirTests dir name run = do
