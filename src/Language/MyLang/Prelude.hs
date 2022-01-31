@@ -1,7 +1,7 @@
 module Language.MyLang.Prelude (module X) where
 
 import Control.Exception as X (Exception (..), throwIO)
-import Control.Lens as X (use, uses, (%=), (*=), (+=), (.=), (<>=))
+import Control.Lens as X (use, uses, (%=), (*=), (+=), (.=), (<+=), (<<~), (<>=))
 import Control.Monad.Except as X
 import Control.Monad.Reader as X
 import Control.Monad.State as X

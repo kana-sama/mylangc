@@ -24,6 +24,7 @@ default-extensions:
   - MonadComprehensions
   - StandaloneDeriving
   - StrictData
+  - PartialTypeSignatures
 
 ghc-options:
   - -Wunused-packages
@@ -32,6 +33,7 @@ ghc-options:
   - -Wmissing-fields
   - -Wmissing-methods
   - -Wunused-imports
+  - -Wno-partial-type-signatures
 
 executables:
   mylangc:

@@ -4,6 +4,7 @@
 
 module Language.MyLang.StackMachine
   ( Prog,
+    ResultAction (..),
     Instr (..),
     Config (..),
     unitToProg,
@@ -60,6 +61,9 @@ type M = StateT Config (Except StackMachineError)
 runM :: M a -> Config -> Either StackMachineError (a, Config)
 runM m config = runExcept (runStateT m config)
 
+data ResultAction = IgnoreResult | SaveResult
+  deriving stock (Show, Eq)
+
 data Instr
   = PUSH Value
   | BINOP BinOp
@@ -69,9 +73,10 @@ data Instr
   | SAVE Ident
   | JMP Label
   | JMPZ Label
-  | CALL Label
-  | BEGIN [Ident] [Ident]
+  | CALL {arity :: Int, resultAction :: ResultAction, name :: Label}
+  | BEGIN Ident [Ident] [Ident]
   | END
+  | RET ResultAction
   | LABEL Label
   deriving stock (Show)
 
@@ -89,7 +94,7 @@ exprToProg = \case
       ]
   Apply f args ->
     concatMap exprToProg args
-      ++ [CALL f]
+      ++ [CALL (length args) SaveResult f]
 
 type GenM = StateT Int (Writer Prog)
 
@@ -109,7 +114,7 @@ stmToProg = \case
   Call f args -> do
     for_ args \arg -> do
       tell (exprToProg arg)
-    tell [CALL f]
+    tell [CALL (length args) IgnoreResult f]
   Skip -> pure ()
   If cond th el -> mdo
     tell (exprToProg cond)
@@ -133,10 +138,11 @@ stmToProg = \case
     stmToProg body
     tell (exprToProg cond)
     tell [JMPZ label_loop]
-  Return mexpr -> do
-    for_ mexpr \expr -> do
-      tell (exprToProg expr)
-    tell [END]
+  Return (Just expr) -> do
+    tell (exprToProg expr)
+    tell [RET SaveResult]
+  Return Nothing -> do
+    tell [RET IgnoreResult]
   stm1 `Seq` stm2 -> do
     stmToProg stm1
     stmToProg stm2
@@ -150,13 +156,17 @@ stmToProg = \case
 defToProg :: Definition -> GenM ()
 defToProg Definition {name, args, locals, body} = do
   tell [LABEL name]
-  tell [BEGIN args locals]
+  tell [BEGIN name args locals]
   stmToProg body
   tell [END]
 
 unitToProg :: Unit -> Prog
 unitToProg Unit {body, defs} = gen do
+  tell [LABEL "main"]
+  tell [BEGIN "main" [] []]
   stmToProg body
+  tell [PUSH 0]
+  tell [RET SaveResult]
   tell [END]
   for_ defs \def -> do
     defToProg def
@@ -219,11 +229,11 @@ step labelTable prog = do
         if val == 0
           then #cursor .= labelTable Map.! label
           else #cursor += 1
-      CALL label -> do
+      CALL _ _ label -> do
         mem <- use #memory
         #frames %= ((cursor + 1, mem) :)
         #cursor .= labelTable Map.! label
-      BEGIN args locals -> do
+      BEGIN _name args locals -> do
         #memory %= Memory.enterWith (args ++ locals)
         for_ (reverse args) \var -> do
           val <- pop
@@ -231,15 +241,18 @@ step labelTable prog = do
         for_ locals \var -> do
           #memory %= Memory.insert var 0
         #cursor += 1
-      END ->
-        use #frames >>= \case
-          [] -> #halted .= True
-          (cursor, mem) : frames -> do
-            #frames .= frames
-            #memory %= Memory.leaveTo mem
-            #cursor .= cursor
+      END -> ret
+      RET _ -> ret
       LABEL label -> do
         #cursor += 1
+  where
+    ret =
+      use #frames >>= \case
+        [] -> #halted .= True
+        (cursor, mem) : frames -> do
+          #frames .= frames
+          #memory %= Memory.leaveTo mem
+          #cursor .= cursor
 
 prebuild :: Prog -> (Map Label Int, Vector Instr)
 prebuild prog =
